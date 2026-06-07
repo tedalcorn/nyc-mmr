@@ -392,6 +392,27 @@ function computeNotable(){
   return {imp:out.filter(o=>o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)),
           wor:out.filter(o=>!o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct))};
 }
+// Curated measures pinned to the overview regardless of whether they're big
+// "movers" — edit this list to feature/elevate specific indicators.
+const FEATURED=[
+  'dhs-average-number-of-single-adults-in-shelters-per-day',
+  'acs-average-number-of-children-in-foster-care',
+  'doe-average-expenditure-per-student',
+  'pdf-nycha-average-turnaround-days-for-vacant-apartments',
+];
+function featuredPanel(){
+  const byk={}; INDS.forEach(i=>byk[i.key]=i);
+  const items=FEATURED.map(k=>byk[k]).filter(Boolean);
+  if(!items.length) return '';
+  return `<div class="panel"><h2>Key indicators to watch</h2>
+    <table class="ntable"><tbody>${items.map(i=>{
+      const pu=parseUnit(i.name), ys=yearsOf(i.series), y1=ys[ys.length-1], v=i.series[y1];
+      return `<tr onclick="openIndicator('${i.key}')">
+        <td>${esc(pu.name)} <span class="muted">· ${i.agency}</span></td>
+        <td class="trendcell" style="width:150px">${trendInner(i.series,pu.sfx)}</td>
+        <td style="text-align:right;white-space:nowrap;font-weight:600">${fmtU(v,pu.sfx)} <span class="muted" style="font-weight:400;font-size:11px">FY'${String(y1).slice(2)}</span></td>
+        <td style="text-align:right">${changeBadge(i)}</td></tr>`;}).join('')}</tbody></table></div>`;
+}
 function diversifyByDomain(arr,n,capPer){
   // arr is sorted by |pct| desc. Take the biggest movers but cap how many come
   // from any one domain, so the spotlight spans education/health/safety/etc.
@@ -441,6 +462,7 @@ function renderOverview(){
       <div class="kpi"><div class="n">${m.n_agencies}</div><div class="l">agencies & entities</div></div>
       <div class="kpi"><div class="n">FY${m.fy_min}–${m.fy_max}</div><div class="l">years covered (PDF + machine-readable)</div></div>
     </div>
+    ${featuredPanel()}
     ${notablePanel()}
     <div class="panel">
       <h2>How much the city measures — and its churn</h2>
