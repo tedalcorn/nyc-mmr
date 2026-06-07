@@ -358,6 +358,8 @@ function computeNotable(){
   const maxY=+META.fy_max, out=[];
   const med=a=>{a=[...a].sort((x,y)=>x-y);return a.length?a[Math.floor((a.length-1)/2)]:null;};
   INDS.forEach(i=>{
+    if(i.salience!=='high') return;                          // spotlight only the measures that matter most
+    if(i.flags&&i.flags.length) return;                      // any uninvestigated discontinuity -> not "fully captured"
     if(i.dir!=='Up'&&i.dir!=='Down') return;
     if(/cumulative|to date|to-date/i.test(i.name)) return;   // cumulative measures only ever rise — not a real "change"
     const ys=yearsOf(i.series); if(ys.length<6) return;
@@ -407,7 +409,8 @@ function renderOverview(){
   const el=$('#tab-overview');
   el.innerHTML=`
     <div class="kpis">
-      <div class="kpi"><div class="n">${m.n_indicators.toLocaleString()}</div><div class="l">citywide indicators tracked</div></div>
+      <div class="kpi"><div class="n">${(m.n_active||0).toLocaleString()}</div><div class="l">active indicators (latest MMR)</div></div>
+      <div class="kpi"><div class="n">${m.n_indicators.toLocaleString()}</div><div class="l">indicators ever tracked</div></div>
       <div class="kpi"><div class="n">${m.n_agencies}</div><div class="l">agencies & entities</div></div>
       <div class="kpi"><div class="n">FY${m.fy_min}–${m.fy_max}</div><div class="l">years covered (PDF + machine-readable)</div></div>
     </div>
@@ -464,7 +467,8 @@ function renderAgencies(){
     ${m.domains.map(d=>`<div class="panel"><span class="pill" style="background:${DOMAIN_COLOR[d]}">${esc(d)}</span>
       <div class="cards" style="margin-top:12px">${(byDom[d]||[]).sort((a,b)=>b.n_indicators-a.n_indicators).map(a=>
         `<div class="card" onclick="go({agency:'${a.code}'})"><h3>${esc(a.name)} (${a.code})</h3>
-          <div class="meta">${a.n_indicators} indicators</div></div>`).join('')}</div></div>`).join('')}`;
+          <div class="meta">${(a.n_active??a.n_indicators)} active in latest MMR</div>
+          <div class="meta">${a.n_indicators} reported all-time</div></div>`).join('')}</div></div>`).join('')}`;
 }
 function renderAgency(code){
   const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
@@ -718,18 +722,30 @@ function renderDetail(key){
     prov+=`<li><strong>FY${i.pdf_min}–${sm-1}:</strong> archived MMR PDF reports (${method})${renamed?`; reported then as “${esc(i.pdf_link_from)}”`:''}</li>`;
   }
   const hasGeo=i.geotypes&&i.geotypes.length;
-  // chronological source list: each pre-2016 year -> its MMR PDF; 2016+ -> Open Data
+  // source list grouped by the edition that ACTUALLY supplied each year. Many pre-2016
+  // values come from a later edition's 5-year look-back, so we cite that edition (with
+  // its page) — never an MMR that merely happened to share the fiscal year.
   const pu_urls=META.pdf_urls||{};
-  const pdfYs=ys.filter(y=>y<sm), odYs=ys.filter(y=>y>=sm);
-  const sp=i.src_pages||{};
-  let srcList=pdfYs.map(y=>`<li>FY${y}: ${pu_urls[y]?`<a href="${pu_urls[y]}" target="_blank" rel="noopener">Mayor's Management Report (PDF)</a>`:'MMR PDF'}${sp[y]?` <span class="muted">p.${sp[y]}</span>`:''}</li>`).join('');
-  if(odYs.length) srcList+=`<li>FY${odYs[0]}–${odYs[odYs.length-1]}: <a href="${META.opendata_url}" target="_blank" rel="noopener">NYC Open Data</a></li>`;
+  const odYs=ys.filter(y=>y>=sm), prov=i.pdf_prov||{};
+  const byEd={};
+  for(const y of ys.filter(y=>y<sm)){
+    const p=prov[y]; if(!p) continue;
+    const ed=p[0], pg=p[1];
+    (byEd[ed]=byEd[ed]||{pg:pg,years:[]}).years.push(+y);
+  }
+  let srcList=Object.keys(byEd).map(Number).sort((a,b)=>a-b).map(ed=>{
+    const g=byEd[ed], yy=g.years.sort((a,b)=>a-b);
+    const span=yy.length>1?`FY${yy[0]}–FY${yy[yy.length-1]}`:`FY${yy[0]}`;
+    const url=pu_urls[ed];
+    return `<li>${span}: ${url?`<a href="${url}" target="_blank" rel="noopener">FY${ed} Mayor's Management Report (PDF)</a>`:`FY${ed} MMR`}${g.pg?` <span class="muted">p.${g.pg}</span>`:''}</li>`;
+  }).join('');
+  if(odYs.length) srcList+=`<li>FY${odYs[0]}–FY${odYs[odYs.length-1]}: <a href="${META.opendata_url}" target="_blank" rel="noopener">NYC Open Data</a></li>`;
   const renameNote = (i.pdf_link_from&&i.pdf_link_from.toLowerCase()!==pu.name.toLowerCase())
     ? `<div style="font-style:italic;color:var(--muted);font-size:12.5px;margin-top:5px">Reported FY${i.pdf_min}–${sm-1} as “${esc(i.pdf_link_from)}”.</div>`:'';
   el.innerHTML=`<span class="backlink" onclick="backFromDetail()">← Back</span>
     <div class="detail-head">
       <div><h2>${esc(pu.name)}</h2>
-        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${i.retired?` <span class="placard" title="Flagged 'retired' in the city's own data. Number = last fiscal year it was reported.">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`:''}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}</div>
+        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${i.retired?` <span class="placard" title="Flagged 'retired' in the city's own data. Number = last fiscal year it was reported.">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`:''}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}${i.salience?` <span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}${i.valence&&i.valence!=='neutral'?' · up is '+(i.valence==='good'?'good':'bad'):''}">${i.salience} salience</span>`:''}</div>
         ${i.service?`<div class="ctx">${esc(i.service)}</div>`:''}</div>
     </div>
     <div class="row2">
@@ -895,25 +911,28 @@ function ngToggle(key,gt,u){const h=window._ngHl;h.has(u)?h.delete(u):h.add(u);s
 
 /* ---------- ABOUT ---------- */
 function renderAbout(){
-  const cby=META.cpi_base_year||'';
+  const cby=META.cpi_base_year||2026;
+  const series=(Math.floor(META.n_indicators/500)*500).toLocaleString();
+  const active=(META.n_active||0).toLocaleString();
   $('#tab-about').innerHTML=`<h2>About</h2>
   <div class="panel">
-    <p>The Mayor's Management Report is New York City's account of how its agencies are performing, published since 1977 as required by the City Charter. This tool brings those measures together — ${META.n_indicators.toLocaleString()} of them across ${META.n_agencies} agencies, spanning fiscal years ${META.fy_min} to ${META.fy_max} — and lets you follow each one over time, by agency, and by neighborhood.</p>
+    <p>Since 1977, New York City has published a Mayor's Management Report, as required by its charter, which includes data for tracking the performance of the city's agencies. The MMR was published for twenty years in hard copy before digital PDFs were introduced, and finally, beginning in 2016, was uploaded as machine-readable data on NYC Open Data.</p>
+    <p>This tracker is an attempt to assemble the data in a single, searchable system.</p>
 
-    <h3>Where the data comes from</h3>
-    <p>Figures for FY${META.structured_min||2016} onward come from the city's machine-readable MMR on NYC Open Data (dataset <code>rbed-zzin</code>). Earlier years come from the archived MMR PDFs, which we extracted measure by measure. For each year we use the fiscal-year-end value the city reported for that measure.</p>
+    <h3>Data sources</h3>
+    <p>This tracker combines data parsed from PDFs of the MMRs from FY1997–2026 and machine-readable data from 2016 onward. Agencies occasionally shift or relabel the data they collect, and add or drop indicators, so this tracker attempts to link the various data sources into coherent longitudinal series. This has yielded over ${series} series of data across ${META.n_agencies} agencies, including ${active} active indicators published in the most recent MMR.</p>
 
-    <h3>What we did to the data</h3>
+    <p>Linking the data required several steps:</p>
     <ul class="tight">
-      <li><strong>Joined the PDF and machine-readable records.</strong> The two name many of the same measures differently. We match a PDF measure to its machine-readable counterpart only when their values agree across the years they overlap — a fingerprint, not a guess — so a measure's history stays continuous even when its name changed.</li>
-      <li><strong>Merged duplicate listings.</strong> The city often prints the same figure more than once — under a slightly different name within an agency, or in two places at once. In particular, the MMR's mayoral "Blueprint" sections (Vision Zero, the Child Care and Housing Blueprints, the gun-violence and recovery plans) re-report numbers that an operating agency already publishes — e.g. traffic deaths appear under both the Department of Transportation and Vision Zero. We keep a single series for each such measure, attributed to both the agency and the initiative. Where two operating agencies report genuinely different figures, we keep them separate.</li>
-      <li><strong>Corrected unit changes.</strong> A few dollar measures switched from thousands of dollars to whole dollars mid-stream without a rename; we put the whole series in one unit.</li>
-      <li><strong>Adjusted for inflation.</strong> Dollar measures carry a second line in constant ${cby} dollars, using the federal CPI-U.</li>
-      <li><strong>Flagged what looks wrong.</strong> Values far out of line with the rest of a series are marked (⚠) for review rather than removed; the underlying number is always shown as the city reported it.</li>
-      <li><strong>Left out the current, in-progress year.</strong> The mid-year report covers only part of the year, so including it would read as a false decline.</li>
+      <li><strong>Joined the PDF and machine-readable records.</strong> For each indicator, PDF MMRs typically include up to four trailing years of data, which makes it easier to accurately match indicators from PDF to PDF even when the labeling convention changes. Some measures are labeled differently even in the annual PDF and the machine-readable data for that same year; this tracker matches a PDF measure to its machine-readable counterpart only when the values agree across the years they overlap.</li>
+      <li><strong>Merged duplicate listings.</strong> The city sometimes publishes the same indicator multiple times, for example when it is the responsibility of multiple agencies or is salient in a mayoral initiative like Vision Zero, the Child Care and Housing Blueprints, or the city's gun-violence and recovery plans. This tracker attempts to eliminate duplicate series, instead attributing a single data set to all agencies or initiatives where it is named. If two operating agencies report genuinely different figures, they are retained separately.</li>
+      <li><strong>Normalized units.</strong> In a few cases the units for an indicator switched between years (e.g. from dollars to thousands of dollars); this tracker normalizes the series to a consistent unit.</li>
+      <li><strong>Adjusted for inflation.</strong> For indicators measured in dollars, this tracker calculates inflation-adjusted values in constant ${cby} dollars, using the federal CPI-U.</li>
     </ul>
 
-    <p class="note" style="margin-top:14px">Source: NYC Open Data and the archived Mayor's Management Reports. Inflation: U.S. Bureau of Labor Statistics, CPI-U. A Vital City project.</p>
+    <p>The complexity of these processes creates opportunities to introduce errors, so all data included in the tracker should be interpreted cautiously. It is designed to be transparent about the source of the assembled data, including links and page numbers for the PDFs from which it is sourced. Indicators with discontinuities or that exhibit unusual patterns are flagged for manual review (⚠).</p>
+
+    <p class="note" style="margin-top:14px">Sources: NYC Open Data and the archived Mayor's Management Reports; inflation from the U.S. Bureau of Labor Statistics, CPI-U. A Vital City project.</p>
   </div>`;
 }
 
