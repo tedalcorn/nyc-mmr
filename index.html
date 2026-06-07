@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NYC Performance Tracker · Mayor's Management Report</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f6f5f1; --panel:#fff; --ink:#1b1b1a; --muted:#6c6a64; --line:#e4e1d8;
+  --accent:#b9381f; --accent-soft:#f4e2dc; --good:#2e7d57; --bad:#b9381f;
+  --d1:#b9381f; --d2:#2e6f8e; --d3:#5a8a3c; --d4:#9a6a2e; --d5:#6d558f; --d6:#3c7d7a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.5;font-size:15px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+header{padding:22px 24px 8px;max-width:1180px;margin:0 auto}
+header h1{font-size:23px;font-weight:700;letter-spacing:-.3px}
+header p{color:var(--muted);font-size:14px;margin-top:3px;max-width:760px}
+nav.tabs{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
+  display:flex;gap:2px;padding:0 24px;max-width:1180px;margin:10px auto 0;flex-wrap:wrap}
+nav.tabs button{padding:11px 15px;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--muted);cursor:pointer;font-size:14px;font-weight:600}
+nav.tabs button:hover{color:var(--ink)}
+nav.tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+main{max-width:1180px;margin:0 auto;padding:22px 24px 80px}
+section.tab{display:none}
+section.tab.active{display:block;animation:fade .2s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+h2{font-size:19px;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.cards.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:680px){.cards.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ctx{color:var(--muted);font-size:13px;margin-top:8px;max-width:680px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;cursor:pointer;
+  transition:box-shadow .15s,transform .15s}
+.card:hover{box-shadow:0 4px 14px rgba(0,0,0,.07);transform:translateY(-1px)}
+.card h3{font-size:15.5px;margin-bottom:4px}
+.card .meta{color:var(--muted);font-size:12.5px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px}
+.kpi .n{font-size:26px;font-weight:700}
+.kpi .l{color:var(--muted);font-size:12.5px;margin-top:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+.chartwrap{position:relative;height:340px}
+.note{color:var(--muted);font-size:12px;margin-top:10px;font-style:italic;border-top:1px solid var(--line);padding-top:8px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.ctl{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+#ngHl{max-height:118px;overflow-y:auto;align-items:flex-start}
+.chip{font:inherit;font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:11px;background:#fff;color:#555;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:#b9381f;color:#b9381f}
+.chip.on{background:#b9381f;border-color:#b9381f;color:#fff}
+.ntable{width:100%;border-collapse:collapse;font-size:13px}
+.ntable td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.ntable tr{cursor:pointer}
+.ntable tr:hover td{background:#f7f3ee}
+input[type=text],select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff;color:var(--ink)}
+input[type=text]{min-width:240px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);font-size:13.5px}
+th{background:#faf9f6;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);cursor:pointer;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#faf6f4}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600;color:#fff;white-space:nowrap}
+.trendcell{white-space:nowrap}
+/* fixed layout so the Trend column sits at the same x in every section,
+   keeping sparkline years vertically aligned across tables */
+table.indtable{table-layout:fixed}
+table.indtable col.cAg{width:62px}
+table.indtable col.cTr{width:214px}
+table.indtable col.cCh{width:80px}
+table.indtable col.cSt{width:104px}
+table.indtable td:first-child{overflow:hidden;text-overflow:ellipsis}
+.trend{position:relative;display:inline-block;width:200px;height:26px;vertical-align:middle}
+.trend svg{position:absolute;left:0;top:0}
+.tlab{position:absolute;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap;transform:translateY(-50%);cursor:help}
+.tlab.s{transform:translate(-100%,-50%);color:var(--muted);font-weight:500}
+.placard{display:inline-block;background:#ececec;color:#777;font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;white-space:nowrap}
+.lbtn{font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:#fff;cursor:pointer;margin-right:4px}
+.lbtn.ok{border-color:#3c6e2e;color:#3c6e2e}.lbtn.no{color:#b9381f}
+#dlbtn{font-size:12px;padding:6px 12px;border:none;border-radius:6px;background:#2e6f8e;color:#fff;cursor:pointer}
+.yrsmall{font-size:10px;color:var(--muted)}
+th .arr{font-size:9px;color:var(--accent)}
+.trendnum{font-variant-numeric:tabular-nums;font-weight:600}
+.up{color:var(--bad)} .down{color:var(--good)} /* default; overridden by desired direction */
+.backlink{display:inline-block;margin-bottom:12px;font-size:13.5px;cursor:pointer}
+.detail-head{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px}
+.tag{display:inline-block;background:var(--accent-soft);color:var(--accent);padding:2px 9px;border-radius:6px;font-size:12px;font-weight:600;margin-right:6px}
+.def{color:var(--ink);font-size:13.5px;background:#faf9f6;border-left:3px solid var(--line);padding:10px 12px;border-radius:0 6px 6px 0;margin-top:10px}
+.muted{color:var(--muted)}
+.loading{padding:60px;text-align:center;color:var(--muted)}
+.dirgood{color:var(--good);font-weight:600}.dirbad{color:var(--bad);font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:760px){.row2{grid-template-columns:1fr}.chartwrap{height:280px}}
+ul.tight{margin:8px 0 0 18px}ul.tight li{margin:3px 0;font-size:13.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="hdrTitle">New York City Performance Tracker</h1>
+  <p>Explore data from the <strong>Mayor's Management Report</strong>, the city's biannual account of how its agencies are performing.</p>
+</header>
+<nav class="tabs">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="agencies">Agencies</button>
+  <button data-tab="indicators">Indicators</button>
+  <button data-tab="neighborhoods">Neighborhoods</button>
+  <button data-tab="about">About</button>
+</nav>
+<main>
+  <section id="tab-overview" class="tab active"><div class="loading">Loading data…</div></section>
+  <section id="tab-agencies" class="tab"></section>
+  <section id="tab-indicators" class="tab"></section>
+  <section id="tab-neighborhoods" class="tab"></section>
+  <section id="tab-about" class="tab"></section>
+</main>
+
+<script>
+const DOMAIN_COLOR = {};
+let META=null, INDS=null, BYKEY={}, GEO_INDEX=null, charts={}, HIST_UNMATCHED=null;
+const geoCache={};
+
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>n==null?'—':(Math.abs(n)>=1000?n.toLocaleString(undefined,{maximumFractionDigits:0}):(Number.isInteger(n)?n:n.toLocaleString(undefined,{maximumFractionDigits:2})));
+// pull a unit out of a trailing "(...)" in the indicator name, when it's a
+// recognized unit, so we can show "94%" / "10 days" instead of cluttering the name.
+const UNITRE=/\s*\(([^()]+)\)\s*$/;
+function parseUnit(name){
+  const m=name.match(UNITRE); if(!m) return {name,sfx:''};
+  const raw=m[1].trim(), low=raw.toLowerCase(); let sfx=null;
+  if(raw==='%'||low==='percent') sfx='%';
+  else if(/^(days?|minutes?|min|hours?|hrs?|months?|years?|yrs?|weeks?|seconds?|secs?)$/.test(low)) sfx=' '+raw;
+  if(sfx==null) return {name,sfx:''};
+  return {name:name.slice(0,m.index).trim(), sfx};
+}
+const fmtU=(v,sfx)=>v==null?'—':fmt(v)+(sfx||'');
+// sort key that ignores leading punctuation (so "(Average…" / "-Foo" sort by letter)
+const sortName=i=>(i.name||'').replace(/^[^a-z0-9]+/i,'').toLowerCase();
+
+function yearsOf(series){return Object.keys(series).map(Number).sort((a,b)=>a-b);}
+function isPartial(fy){return META.partial_years.includes(String(fy));}
+
+/* ---------- tab routing ---------- */
+function showTab(t){
+  $$('nav.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
+  $$('section.tab').forEach(s=>s.classList.remove('active'));
+  const el=$('#tab-'+t); if(el)el.classList.add('active');
+  writeHash();
+}
+$$('nav.tabs button').forEach(b=>b.onclick=()=>{ state.tab=b.dataset.tab; delete state.key; delete state.agency; delete state.domain; render(); });
+
+/* ---------- hash state ---------- */
+let state={tab:'overview'};
+function writeHash(){
+  const p=new URLSearchParams();
+  for(const k of ['tab','key','agency','domain','geo','q']) if(state[k]) p.set(k,state[k]);
+  history.replaceState(null,'',p.toString()?'#'+p:location.pathname);
+}
+function readHash(){
+  const p=new URLSearchParams(location.hash.slice(1));
+  const s={tab:p.get('tab')||'overview'};
+  for(const k of ['key','agency','domain','geo','q']) if(p.get(k)) s[k]=p.get(k);
+  return s;
+}
+
+/* ---------- main render dispatch ---------- */
+function render(){
+  showTab(state.tab);
+  if(state.tab==='overview') renderOverview();
+  else if(state.tab==='agencies') state.agency?renderAgency(state.agency):renderAgencies();
+  else if(state.tab==='indicators') state.compare?renderLinkCompare(state.compare):state.key?renderDetail(state.key):renderIndicators();
+  else if(state.tab==='neighborhoods') renderNeighborhoods();
+  else if(state.tab==='about') renderAbout();
+  attachSortable();
+  writeHash();
+  window.scrollTo(0,0);
+}
+function go(patch){ Object.assign(state,patch); render(); }
+// open an indicator detail while remembering where we came from (agency, topic,
+// or the filtered list) so "Back" returns there instead of the full list.
+let pendingScroll=null;
+function openIndicator(key){ const from={...state}; delete from._from; from._scroll=window.scrollY; state={tab:'indicators',key,_from:from}; render(); }
+function goCompare(tr){ const d=tr.dataset; const from={...state}; delete from._from; from._scroll=window.scrollY; state={tab:'indicators',compare:{ag:d.ag,name:d.name,key:d.key},_from:from}; render(); }
+function backFromDetail(){ if(state._from){ pendingScroll=state._from._scroll||0; state={...state._from}; render(); } else go({key:null,compare:null}); }
+function restorePendingScroll(){ if(pendingScroll!=null){ const y=pendingScroll; pendingScroll=null; requestAnimationFrame(()=>window.scrollTo(0,y)); } }
+
+/* ---------- charts ---------- */
+function destroyChart(id){ if(charts[id]){charts[id].destroy();delete charts[id];} }
+
+// Build a fiscal-year line chart honoring Ted's prefs:
+// year-format x labels, NO x gridlines, keep y labels, partial year dashed, grey caveat note.
+function lineChart(canvasId, series, opt={}){
+  const ys=yearsOf(series);
+  const labels=ys.map(String);
+  const data=ys.map(y=>series[y]??null);
+  const lastPartial=ys.length && isPartial(ys[ys.length-1]);
+  destroyChart(canvasId);
+  const ctx=$('#'+canvasId);
+  charts[canvasId]=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[{
+      label:opt.label||'Value',data,
+      borderColor:opt.color||'var(--accent)',backgroundColor:'transparent',
+      borderWidth:2,tension:.2,
+      pointRadius:ys.map((y,i)=>isPartial(y)?5:3),
+      pointStyle:ys.map(y=>isPartial(y)?'rectRot':'circle'),
+      pointBackgroundColor:ys.map(y=>isPartial(y)?'#fff':(opt.color||'#b9381f')),
+      pointBorderColor:opt.color||'#b9381f',
+      segment:{borderDash:c=>(lastPartial&&c.p1DataIndex===ys.length-1)?[5,4]:undefined}
+    }]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:!!opt.legend},tooltip:{callbacks:{
+        title:i=>'FY'+i[0].label,
+        label:i=>fmt(i.raw)+(isPartial(i.label)?'  (preliminary)':'')
+      }}},
+      scales:{
+        x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,autoSkip:true,font:{size:11}}},
+        y:{beginAtZero:!!opt.zero,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},callback:v=>fmt(v)},
+           title:{display:!!opt.ytitle,text:opt.ytitle||''}}
+      }
+    }
+  });
+}
+
+function barChart(canvasId, labels, data, colors){
+  destroyChart(canvasId);
+  charts[canvasId]=new Chart($('#'+canvasId),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:colors||'#b9381f',borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>fmt(i.raw)}}},
+      scales:{x:{grid:{display:false,drawBorder:false},ticks:{font:{size:11}}},
+        y:{grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},callback:v=>fmt(v)},beginAtZero:true}}}
+  });
+}
+
+// Sparkline on a SHARED FY-min..FY-max axis (line length/position = how long &
+// when tracked), with a dot at each end and the value labeled beside that dot.
+// Single year of data -> one dot and just the latest value (start left blank).
+function trendInner(series,sfx){
+  const ys=yearsOf(series); if(!ys.length) return '';
+  const gmin=+META.fy_min, gmax=+META.fy_max, span=(gmax-gmin)||1;
+  const W=200,H=26,X0=54,X1=150,PT=5,PB=5;
+  const xOf=y=>X0+((y-gmin)/span)*(X1-X0);
+  const v=ys.map(y=>series[y]); const mn=Math.min(...v),mx=Math.max(...v),rng=(mx-mn)||1;
+  const yOf=val=>(H-PB)-((val-mn)/rng)*(H-PT-PB);
+  const y0=ys[0], y1=ys[ys.length-1], single=ys.length<2;
+  const csf=(sfx||'').replace(/ months?$/i,'mo').replace(/ minutes?$/i,'min').replace(/ hours?$/i,'h').replace(/ days?$/i,'d');
+  const x1=xOf(y1), yy1=yOf(series[y1]);
+  let svg='';
+  if(!single){
+    // break the line at GAPS (missing interior years) so a discontinuity shows as
+    // a real break, not a faked straight line across it.
+    let seg=[ys[0]];
+    const flush=()=>{
+      if(seg.length>1) svg+=`<polyline points="${seg.map(y=>xOf(y).toFixed(1)+','+yOf(series[y]).toFixed(1)).join(' ')}" fill="none" stroke="#b9381f" stroke-width="1.5"/>`;
+      else svg+=`<circle cx="${xOf(seg[0]).toFixed(1)}" cy="${yOf(series[seg[0]]).toFixed(1)}" r="1.5" fill="#b9381f"/>`;
+    };
+    for(let k=1;k<ys.length;k++){ if(ys[k]===ys[k-1]+1) seg.push(ys[k]); else { flush(); seg=[ys[k]]; } }
+    flush();
+    svg+=`<circle cx="${xOf(y0).toFixed(1)}" cy="${yOf(series[y0]).toFixed(1)}" r="2.2" fill="#b9381f"/>`;
+  }
+  svg+=`<circle cx="${x1.toFixed(1)}" cy="${yy1.toFixed(1)}" r="2.2" fill="#b9381f"/>`;
+  const startLab=single?'':`<span class="tlab s" style="left:${(xOf(y0)-3).toFixed(1)}px;top:${yOf(series[y0]).toFixed(1)}px" title="FY${y0}">${fmtU(series[y0],csf)}</span>`;
+  const endLab=`<span class="tlab e" style="left:${(x1+5).toFixed(1)}px;top:${yy1.toFixed(1)}px" title="FY${y1}">${fmtU(series[y1],csf)}</span>`;
+  return `<div class="trend"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>${startLab}${endLab}</div>`;
+}
+
+// signed % change, first -> last complete year
+// desired-direction overrides (when the data lacks one, or it's wrong) — saved in
+// the browser, exportable to config/manual_directions.json for the build to bake in.
+function dirOverrides(){ try{return JSON.parse(localStorage.getItem('mmr_dir')||'{}');}catch(e){return {};} }
+function effDir(ind){ return dirOverrides()[ind.key] || ind.dir; }
+function dlDirs(){ const m=dirOverrides();
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(m,null,2)],{type:'application/json'}));
+  a.download='mmr_direction_decisions.json'; a.click(); }
+function directionBox(i){
+  const d=effDir(i), ov=dirOverrides()[i.key], n=Object.keys(dirOverrides()).length;
+  const lbl=d==='Down'?'↓ Lower is better':d==='Up'?'↑ Higher is better':'— no directional goal';
+  const cls=d==='None'?'muted':'dirgood';
+  // label only; click it to reveal the edit controls (hidden otherwise)
+  return `<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':''}
+    <div id="dirBtns" data-key="${i.key}" style="display:none;margin-top:6px">
+      <button class="lbtn" data-dir="Up">↑ higher</button><button class="lbtn" data-dir="Down">↓ lower</button><button class="lbtn" data-dir="None">– neutral</button>${ov?` <button class="lbtn" data-dir="clear">reset</button>`:''}${n?` <button class="lbtn" onclick="dlDirs()" title="export all direction edits">⬇ ${n}</button>`:''}
+    </div>`;
+}
+function toggleDirEdit(){ const b=$('#dirBtns'); if(b) b.style.display=b.style.display==='none'?'block':'none'; }
+function attachDirButtons(){
+  const box=$('#dirBtns'); if(!box) return;
+  box.querySelectorAll('.lbtn[data-dir]').forEach(b=>b.onclick=()=>{
+    const m=dirOverrides(), key=box.dataset.key, v=b.dataset.dir;
+    if(v==='clear') delete m[key]; else m[key]=v;
+    localStorage.setItem('mmr_dir', JSON.stringify(m));
+    renderDetail(key);
+  });
+}
+function pctChange(ind){
+  const ys=yearsOf(ind.series).filter(y=>!isPartial(y));
+  if(ys.length<2) return null;
+  const a=ind.series[ys[0]], b=ind.series[ys[ys.length-1]];
+  if(a==null||b==null||a===0) return null;
+  return ((b-a)/Math.abs(a))*100;
+}
+// colored by whether the move is good or bad given the measure's desired direction
+function changeBadge(ind){
+  const pct=pctChange(ind);
+  if(pct==null) return '<span class="muted">—</span>';
+  const rising=pct>0, dir=effDir(ind);
+  let cls='muted';
+  if(dir==='Down') cls=rising?'dirbad':'dirgood';
+  else if(dir==='Up') cls=rising?'dirgood':'dirbad';
+  return `<span class="trendnum ${cls}">${rising?'▲':'▼'} ${Math.abs(pct).toLocaleString(undefined,{maximumFractionDigits:0})}%</span>`;
+}
+// generic click-to-sort for any <table class="sortable"> with th[data-sort]
+function thLabel(th){ return (th.textContent||'').replace(/[▲▼]/g,'').trim(); }
+function applySort(table, th, asc){
+  [...table.querySelectorAll('thead th')].forEach(t=>{t.dataset.dir='';const a=t.querySelector('.arr');if(a)a.remove();});
+  th.dataset.dir=asc?'asc':'desc';
+  const idx=th.cellIndex, tb=table.tBodies[0], rows=[...tb.rows], num=th.dataset.sort==='num';
+  rows.sort((ra,rb)=>{ let va=ra.cells[idx].dataset.sortval, vb=rb.cells[idx].dataset.sortval;
+    if(num){ const ea=va===''||va==null, eb=vb===''||vb==null;   // blanks always last
+      if(ea&&eb)return 0; if(ea)return 1; if(eb)return -1;
+      va=parseFloat(va);vb=parseFloat(vb);return asc?va-vb:vb-va;}
+    return asc?(''+va).localeCompare(''+vb):(''+vb).localeCompare(''+va);});
+  rows.forEach(r=>tb.appendChild(r));
+  th.insertAdjacentHTML('beforeend',`<span class="arr"> ${asc?'▲':'▼'}</span>`);
+}
+function makeSortable(table){
+  [...table.querySelectorAll('thead th')].forEach(th=>{ if(!th.dataset.sort) return; th.style.cursor='pointer';
+    th.onclick=e=>{ e.stopPropagation();
+      const asc=th.dataset.dir!=='asc';
+      applySort(table, th, asc);
+      state.sort={label:thLabel(th), dir:asc?'asc':'desc'};  // remembered across Back
+    };
+  });
+}
+function attachSortable(){
+  $$('table.sortable').forEach(t=>{ makeSortable(t);
+    if(state.sort){
+      const th=[...t.querySelectorAll('thead th')].find(x=>x.dataset.sort && thLabel(x)===state.sort.label);
+      if(th) applySort(t, th, state.sort.dir==='asc');
+    }
+  });
+}
+
+/* ---------- OVERVIEW ---------- */
+// the biggest sustained moves in measures that have a "good direction", framed
+// as improvement or deterioration (median of first 3 vs last 3 years of a recent
+// window). Skips flagged endpoints, tiny bases, short/retired series.
+function computeNotable(){
+  const maxY=+META.fy_max, out=[];
+  const med=a=>{a=[...a].sort((x,y)=>x-y);return a.length?a[Math.floor((a.length-1)/2)]:null;};
+  INDS.forEach(i=>{
+    if(i.dir!=='Up'&&i.dir!=='Down') return;
+    if(/cumulative|to date|to-date/i.test(i.name)) return;   // cumulative measures only ever rise — not a real "change"
+    const ys=yearsOf(i.series); if(ys.length<6) return;
+    if(ys[0]>2014) return;                                     // established measures only (not new-program ramp-ups)
+    const y1=ys[ys.length-1]; if(maxY-y1>1) return;            // current-ish only
+    const fset=new Set(i.flags||[]);
+    const win=ys.filter(y=>y>=y1-10);                          // last ~10 yrs
+    if(win.length<6) return;
+    const early=win.slice(0,3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
+    const late=win.slice(-3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
+    if(early.length<2||late.length<2) return;
+    const v0=med(early), v1=med(late);
+    if(v0==null||v1==null||Math.abs(v0)<3) return;
+    const pct=(v1-v0)/Math.abs(v0);
+    if(Math.abs(pct)<0.20||Math.abs(pct)>5) return;            // meaningful, but not low-base noise
+    const better=i.dir==='Up'?pct>0:pct<0;
+    out.push({i,y0:win[0],y1,v0,v1,pct,better});
+  });
+  return {imp:out.filter(o=>o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)),
+          wor:out.filter(o=>!o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct))};
+}
+function notableList(arr,good){
+  return arr.slice(0,8).map(o=>{const pu=parseUnit(o.i.name);
+    const arrow=o.pct>0?'▲':'▼', col=good?'#3c7d7a':'#b9381f';
+    return `<tr onclick="openIndicator('${o.i.key}')">
+      <td>${esc(pu.name)} <span class="muted">· ${o.i.agency}</span></td>
+      <td style="text-align:right;white-space:nowrap;color:${col};font-weight:600">${arrow} ${Math.abs(Math.round(o.pct*100))}%</td>
+      <td class="muted" style="text-align:right;white-space:nowrap">FY${String(o.y0).slice(2)}→${String(o.y1).slice(2)}</td></tr>`;}).join('');
+}
+function notablePanel(){
+  const {imp,wor}=computeNotable();
+  if(!imp.length&&!wor.length) return '';
+  return `<div class="panel">
+    <h2>Notable changes</h2>
+    <div class="sub">The largest sustained moves in measures with a clear better/worse direction (first vs. last 3 years of the recent window). Click any to open it.</div>
+    <div class="row2" style="margin-top:12px">
+      <div><div class="ctl" style="color:#3c7d7a;font-weight:600;margin-bottom:6px">▲ Improving</div>
+        <table class="ntable"><tbody>${notableList(imp,true)}</tbody></table></div>
+      <div><div class="ctl" style="color:#b9381f;font-weight:600;margin-bottom:6px">▼ Worsening</div>
+        <table class="ntable"><tbody>${notableList(wor,false)}</tbody></table></div>
+    </div></div>`;
+}
+function renderOverview(){
+  const m=META;
+  const ipy=m.indicators_per_year;
+  const years=Object.keys(ipy).sort((a,b)=>+a-+b);
+  const el=$('#tab-overview');
+  el.innerHTML=`
+    <div class="kpis">
+      <div class="kpi"><div class="n">${m.n_indicators.toLocaleString()}</div><div class="l">citywide indicators tracked</div></div>
+      <div class="kpi"><div class="n">${m.n_agencies}</div><div class="l">agencies & entities</div></div>
+      <div class="kpi"><div class="n">FY${m.fy_min}–${m.fy_max}</div><div class="l">years covered (PDF + machine-readable)</div></div>
+    </div>
+    ${notablePanel()}
+    <div class="panel">
+      <h2>How much the city measures — and its churn</h2>
+      <div class="sub">Indicators reported each year — retained from the prior year, newly added, and leaving the next year</div>
+      <div class="chartwrap"><canvas id="ovChart"></canvas></div>
+    </div>`;
+  const ret=years.map(y=>(m.retained_per_year||{})[y]||0);
+  const added=years.map(y=>(m.new_per_year||{})[y]||0);
+  const leaving=years.map(y=>(m.leaving_per_year||{})[y]||0);
+  destroyChart('ovChart');
+  charts['ovChart']=new Chart($('#ovChart'),{type:'bar',data:{labels:years,datasets:[
+    {label:'Retained',data:ret,backgroundColor:'#c9c4b8'},
+    {label:'Newly added',data:added,backgroundColor:'#5a8a3c'},
+    {label:'Leaving next year',data:leaving,backgroundColor:'#c9a23a'}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:true,labels:{usePointStyle:true,boxWidth:8,font:{size:11}}},
+        tooltip:{mode:'index',callbacks:{title:t=>'FY'+t[0].label,
+          footer:t=>'Total: '+fmt(t.reduce((s,x)=>s+x.raw,0))}}},
+      scales:{x:{stacked:true,grid:{display:false,drawBorder:false},ticks:{font:{size:11}}},
+        y:{stacked:true,beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11}}}}}});
+}
+
+/* ---------- TOPICS ---------- */
+function renderTopics(){
+  const m=META, el=$('#tab-topics');
+  el.innerHTML=`<div class="cards grid3">${m.domains.map(d=>{
+      const ags=m.agencies.filter(a=>a.domain===d);
+      const nInd=ags.reduce((s,a)=>s+a.n_indicators,0);
+      return `<div class="card" onclick="go({domain:'${esc(d)}'})">
+        <span class="pill" style="background:${DOMAIN_COLOR[d]}">${esc(d)}</span>
+        <div class="meta" style="margin-top:10px">${ags.length} agencies · ${nInd} indicators</div></div>`;
+    }).join('')}</div>`;
+}
+function renderDomain(d){
+  const m=META, el=$('#tab-topics');
+  const ags=m.agencies.filter(a=>a.domain===d);
+  const inds=INDS.filter(i=>i.domain===d).sort((a,b)=>a.name.localeCompare(b.name));
+  el.innerHTML=`<span class="backlink" onclick="go({domain:null})">← All topics</span>
+    <div class="detail-head"><div><h2>${esc(d)}</h2>
+    <div class="sub">${ags.length} agencies · ${inds.length} citywide indicators</div></div>
+    <span class="pill" style="background:${DOMAIN_COLOR[d]}">${esc(d)}</span></div>
+    ${indicatorTable(inds,true)}`;
+}
+
+/* ---------- AGENCIES ---------- */
+function renderAgencies(){
+  const m=META, el=$('#tab-agencies');
+  const byDom={};
+  m.agencies.forEach(a=>{(byDom[a.domain]=byDom[a.domain]||[]).push(a);});
+  el.innerHTML=`<h2>Agencies</h2><div class="sub">Grouped by topic. Pick an agency to see everything it reports.</div>
+    ${m.domains.map(d=>`<div class="panel"><span class="pill" style="background:${DOMAIN_COLOR[d]}">${esc(d)}</span>
+      <div class="cards" style="margin-top:12px">${(byDom[d]||[]).sort((a,b)=>b.n_indicators-a.n_indicators).map(a=>
+        `<div class="card" onclick="go({agency:'${a.code}'})"><h3>${esc(a.name)} (${a.code})</h3>
+          <div class="meta">${a.n_indicators} indicators</div></div>`).join('')}</div></div>`).join('')}`;
+}
+function renderAgency(code){
+  const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
+  const inds=INDS.filter(i=>i.agency===code);
+  // group by service area
+  const bySvc={};
+  inds.forEach(i=>{(bySvc[i.service||'Other']=bySvc[i.service||'Other']||[]).push(i);});
+  el.innerHTML=`<span class="backlink" onclick="go({agency:null})">← All agencies</span>
+    <div class="detail-head"><div><h2>${esc(a.name)}</h2>
+    <div class="sub">${code} · ${inds.length} citywide indicators · <span class="pill" style="background:${DOMAIN_COLOR[a.domain]}">${esc(a.domain)}</span></div>
+    ${a.former?`<div class="ctx" style="margin-top:5px">Historical measures here include those once reported under: ${a.former.map(esc).join('; ')}.</div>`:''}</div></div>
+    ${Object.keys(bySvc).sort().map(svc=>`<div class="panel">
+      <h3 style="margin-bottom:8px">${esc(svc)}</h3>${indicatorTable(bySvc[svc],false)}</div>`).join('')}`;
+}
+
+/* ---------- INDICATORS (explore + detail) ---------- */
+function renderIndicators(){
+  const el=$('#tab-indicators');
+  const smin=+META.structured_min||+META.fy_min;
+  el.innerHTML=`<div class="controls">
+      <input type="text" id="q" placeholder="Search indicators…" value="${esc(state.q||'')}">
+      <select id="fDomain"><option value="">All topics</option>${META.domains.map(d=>`<option>${esc(d)}</option>`).join('')}</select>
+      <select id="fAgency"><option value="">All agencies</option>${META.agencies.map(a=>`<option value="${a.code}">${esc(a.name)}</option>`).join('')}</select>
+      <select id="fCov">
+        <option value="">All measures</option>
+        <option value="hist">Has pre-${smin} history</option>
+        <option value="struct">Structured only (no history yet)</option>
+        <option value="unmatched">Unmatched PDF — to link</option>
+      </select>
+    </div>
+    <div id="indTable"></div>`;
+  const q=$('#q'),fd=$('#fDomain'),fa=$('#fAgency'),fc=$('#fCov');
+  fd.value=state.fdom||''; fa.value=state.fag||''; fc.value=state.fcov||'';  // restore on Back
+  const upd=async()=>{
+    state.q=q.value; state.fdom=fd.value; state.fag=fa.value; state.fcov=fc.value;
+    const term=q.value.trim().toLowerCase();
+    const byText=x=>!term||(x.name||'').toLowerCase().includes(term)||(x.agency_name||'').toLowerCase().includes(term);
+    if(fc.value==='unmatched'){
+      if(!HIST_UNMATCHED){try{HIST_UNMATCHED=await fetch('data/historical_unmatched.json').then(r=>r.json());}catch(e){HIST_UNMATCHED=[];}}
+      let r=HIST_UNMATCHED.filter(byText);
+      if(fd.value)r=r.filter(x=>x.domain===fd.value);
+      if(fa.value)r=r.filter(x=>x.agency===fa.value);
+      const dec=mmrLinks();
+      const decidedCount=r.filter(x=>dec[x.agency+'||'+x.name]).length;
+      if(!state.showDecided) r=r.filter(x=>!dec[x.agency+'||'+x.name]);  // skip decided
+      r=r.slice().sort((a,b)=>sortName(a).localeCompare(sortName(b)));
+      $('#indTable').innerHTML=unmatchedTable(r,decidedCount);
+      attachSortable(); attachLinkButtons(); updateLinkBar(); writeHash(); restorePendingScroll(); return;
+    }
+    let r=INDS.filter(byText);
+    if(fd.value)r=r.filter(i=>i.domain===fd.value);
+    if(fa.value)r=r.filter(i=>i.agency===fa.value);
+    if(fc.value==='hist')r=r.filter(i=>i.pdf_min&&i.pdf_min<smin);
+    if(fc.value==='struct')r=r.filter(i=>!(i.pdf_min&&i.pdf_min<smin));
+    r=r.slice().sort((a,b)=>sortName(a).localeCompare(sortName(b)));
+    $('#indTable').innerHTML=indicatorTable(r,true);
+    attachSortable();
+    writeHash(); restorePendingScroll();
+  };
+  q.oninput=upd; fd.onchange=upd; fa.onchange=upd; fc.onchange=upd; window._indUpd=upd; upd();
+}
+
+function indicatorTable(list,showAgency){
+  if(!list.length)return '<p class="muted" style="padding:14px">No indicators match.</p>';
+  return `<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
+    <th data-sort="text">Indicator</th><th${showAgency?' data-sort="text"':''}>${showAgency?'Agency':''}</th>
+    <th data-sort="num" title="Click to sort by how long it has been tracked (longest first)"></th>
+    <th data-sort="num">Change</th><th data-sort="num" title="Retired = no longer reported">Status</th>
+    <th data-sort="num" title="⚠ = the series is missing data internally (a gap between years it otherwise reports). Click to sort flagged-first.">⚠</th></tr></thead><tbody>
+    ${list.map(i=>{
+      const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name);
+      const nf=i.flags?i.flags.length:0;
+      return `<tr onclick="openIndicator('${i.key}')">
+        <td data-sortval="${esc(sortName(i))}">${esc(pu.name)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
+        <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
+        <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
+        <td data-sortval="${i.retired?y1:''}">${i.retired?`<span class="placard" title="No longer reported">Retired '${String(y1).slice(2)}</span>`:''}</td>
+        <td data-sortval="${nf?-nf:''}" style="text-align:center">${nf?`<span style="color:#c98a1b;font-size:14px" title="Missing data internally — no value for FY${i.flags.join(', FY')} (gap between reported years)">⚠</span>`:''}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// ---- link decisions (saved in the browser, exported as a file for the pipeline) ----
+function mmrLinks(){ try{return JSON.parse(localStorage.getItem('mmr_links')||'{}');}catch(e){return {};} }
+function mmrSave(m){ localStorage.setItem('mmr_links', JSON.stringify(m)); }
+function actCellHTML(d){
+  const cur=mmrLinks()[d.ag+'||'+d.name];
+  if(cur&&cur.action==='link') return `<span class="placard" style="background:#e7f0e2;color:#3c6e2e">✓ linked</span> <button class="lbtn" data-act="clear">undo</button>`;
+  if(cur&&cur.action==='reject') return `<span class="placard">✗ no</span> <button class="lbtn" data-act="clear">undo</button>`;
+  return `${d.key?'<button class="lbtn ok" data-act="link">✓ link</button>':''}<button class="lbtn no" data-act="reject">✗</button>`;
+}
+function attachLinkButtons(){
+  $$('#indTable .lbtn').forEach(btn=>btn.onclick=e=>{
+    e.stopPropagation();
+    const tr=btn.closest('tr'); if(!tr) return;
+    const d=tr.dataset, act=btn.dataset.act, m=mmrLinks(), dk=d.ag+'||'+d.name;
+    if(act==='clear') delete m[dk];
+    else m[dk]={agency:d.ag, pdf_name:d.name, action:act, target_key:d.key||'', suggested_name:d.sug||''};
+    mmrSave(m);
+    tr.querySelector('.actcell').innerHTML=actCellHTML(d);
+    attachLinkButtons(); updateLinkBar();
+  });
+  const dl=$('#dlbtn'); if(dl) dl.onclick=()=>{
+    const arr=Object.values(mmrLinks());
+    const blob=new Blob([JSON.stringify(arr,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='mmr_link_decisions.json'; a.click();
+  };
+  const sd=$('#showDecided'); if(sd) sd.onchange=e=>{ state.showDecided=e.target.checked; if(window._indUpd) window._indUpd(); };
+}
+function updateLinkBar(){
+  const dec=mmrLinks(), v=Object.values(dec);
+  const linked=v.filter(x=>x.action==='link').length, rej=v.filter(x=>x.action==='reject').length;
+  let prog='';
+  if(HIST_UNMATCHED){
+    const likely=HIST_UNMATCHED.filter(u=>u.category==='likely-linked');
+    const doneL=likely.filter(u=>dec[u.agency+'||'+u.name]).length;
+    const total=HIST_UNMATCHED.length, doneAll=HIST_UNMATCHED.filter(u=>dec[u.agency+'||'+u.name]).length;
+    prog=` · <strong>${likely.length-doneL}</strong> likely matches left to confirm · <strong>${total-doneAll}</strong> of ${total} total still to review`;
+  }
+  const el=$('#linkcount');
+  if(el){ el.innerHTML=`<strong>${linked}</strong> linked, <strong>${rej}</strong> rejected${prog}`;
+    el.title='"Likely matches" = unmatched PDF measures that have a close structured candidate (the quick wins). "Total" = all unmatched PDF measures, including ones with no obvious candidate.'; }
+}
+
+// PDF-only measures we could not confidently link. Shows the FY11–15 trend, a
+// triage category, the suggested match (click row to inspect the candidate),
+// and per-row ✓link / ✗ buttons that you export when done.
+function unmatchedTable(list,decidedCount){
+  const badge=c=> c==='likely-linked'?'<span class="placard" style="background:#e7f0e2;color:#3c6e2e">likely</span>'
+    : c==='weak-link'?'<span class="placard" style="background:#eef0e2;color:#6a6a2e">weak</span>'
+    : c==='benchmark-differs'?'<span class="placard" style="background:#fbe3d0;color:#9a4a1e" title="different threshold number — likely not the same measure">⚠ benchmark</span>'
+    : c==='resource'?'<span class="placard">resource</span>'
+    : '<span class="placard">no match</span>';
+  const intro=`<div class="note" style="border-top:none;font-style:normal;margin:0 0 10px">
+    A pre-2016 PDF measure that looks like it continues a current one but we couldn't confirm automatically. Obvious matches are already linked; discontinued measures with no counterpart are left out (see <code>inventory/unmatched_no_review.csv</code>). Just the close calls remain.<br>
+    <b>likely</b> = nearly the same name — confirm it's the same measure. &nbsp; <b>⚠ benchmark</b> = the candidate's name carries a <i>different threshold number</i> (e.g. "within 30 days" vs "within 45 days"), so it's probably a redefined target, not the same series.</div>`;
+  const bar=`<div class="controls" style="justify-content:space-between;align-items:center">
+    <span class="muted" id="linkcount"></span>
+    <span><label style="font-size:12px;margin-right:12px"><input type="checkbox" id="showDecided" ${state.showDecided?'checked':''}> show ${decidedCount||0} decided</label>
+    <button id="dlbtn">⬇ Download decisions</button></span></div>`;
+  if(!list.length) return intro+bar+'<p class="muted" style="padding:14px">No undecided measures here.</p>';
+  return intro+bar+`<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col style="width:104px"><col style="width:196px"><col style="width:118px"></colgroup><thead><tr>
+    <th data-sort="text">Indicator (PDF, FY11–15)</th><th data-sort="text">Agency</th>
+    <th data-sort="num"></th><th data-sort="text">Triage</th><th data-sort="num" title="Sort by seam gap — how much the value jumps from FY15 (PDF) to FY16 (structured). Small = likely the same measure.">Suggested match (seam ↕)</th><th>Decision</th></tr></thead><tbody>
+    ${list.map(u=>{
+      const ys=yearsOf(u.series), y0=ys[0], pu=parseUnit(u.name), sug=u.suggestion;
+      const seam=sug&&sug.seam_gap_pct!=null?sug.seam_gap_pct:null;
+      const flat=sug&&sug.distinct!=null&&sug.distinct<0.05;
+      const xag=sug&&sug.match_src==='cross-agency'&&sug.agency?` <span class="placard" style="background:#efe7f0;color:#6d558f">→ ${sug.agency}</span>`:'';
+      const sugtxt=sug?`${esc(parseUnit(sug.name).name)}${xag} <span class="muted">· seam ${seam!=null?seam+'%':'—'}${flat?' · ⚠flat':''}</span>`:'<span class="muted">—</span>';
+      const d={ag:u.agency, name:u.name, key:sug?sug.key:'', sug:sug?sug.name:''};
+      return `<tr data-ag="${esc(u.agency)}" data-name="${esc(u.name)}" data-key="${sug?sug.key:''}" data-sug="${esc(sug?sug.name:'')}" ${sug?`onclick="goCompare(this)" style="cursor:pointer"`:'style="cursor:default"'}>
+        <td data-sortval="${esc(sortName(u))}">${esc(pu.name)}</td>
+        <td class="muted" data-sortval="${u.agency}">${u.agency}</td>
+        <td class="trendcell" data-sortval="${y0}">${trendInner(u.series,pu.sfx)}</td>
+        <td data-sortval="${u.category}">${badge(u.category)}</td>
+        <td data-sortval="${seam!=null?seam:99999}">${sugtxt}</td>
+        <td class="actcell">${actCellHTML(d)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// Overlay a PDF-only measure (FY11–15) with its suggested structured match
+// (FY16+) so the FY15→FY16 join can be eyeballed before linking.
+function renderLinkCompare(c){
+  const el=$('#tab-indicators');
+  const rec=(HIST_UNMATCHED||[]).find(u=>u.agency===c.ag&&u.name===c.name);
+  const cand=BYKEY[c.key];
+  if(!rec||!cand){ el.innerHTML='<span class="backlink" onclick="backFromDetail()">← Back</span><p>Not found.</p>'; return; }
+  const pu=parseUnit(rec.name), cpu=parseUnit(cand.name);
+  const sug=rec.suggestion||{};
+  const v15=rec.series[yearsOf(rec.series).slice(-1)[0]], c16=cand.series['2016'];
+  const seam=sug.seam_gap_pct;
+  const verdict = rec.category==='benchmark-differs'
+      ? '<span style="color:#9a4a1e">⚠ benchmark differs (different threshold numbers) — probably NOT the same measure</span>'
+    : seam==null ? 'No overlapping year to compare — judge by the shape of the join'
+    : seam<=8 ? `<span class="dirgood">✓ lines up across the seam (Δ${seam}%)</span>`
+    : `<span style="color:#9a4a1e">✗ big jump across the seam (Δ${seam}%) — probably not a match</span>`;
+  const seamTxt=(v15!=null&&c16!=null?`FY15 = ${fmt(v15)} → FY16 = ${fmt(c16)}. `:'')
+    +verdict+(sug.distinct!=null&&sug.distinct<0.05?' · values barely vary, so even a match is weak evidence':'');
+  // CONTINUOUS year axis (min..max) so a real gap between the PDF years and the
+  // structured years shows as empty space — not two adjacent columns.
+  const _ally=[...yearsOf(rec.series),...yearsOf(cand.series)].map(Number);
+  const _lo=Math.min(..._ally), _hi=Math.max(..._ally);
+  const yrs=Array.from({length:_hi-_lo+1},(_,k)=>_lo+k);
+  el.innerHTML=`<span class="backlink" onclick="backFromDetail()">← Back to list</span>
+    <div class="detail-head"><div><h2>Same measure? — check the FY15→FY16 join</h2>
+      <div class="sub">If these are the same indicator, the red PDF line should continue smoothly into the blue structured line.</div></div></div>
+    <div class="panel">
+      <div style="margin-bottom:8px">
+        <div><span class="placard" style="background:#f4e2dc;color:#b9381f">PDF FY11–15</span> ${esc(pu.name)} <span class="muted">· ${rec.agency}</span></div>
+        <div style="margin-top:4px"><span class="placard" style="background:#dce8ef;color:#2e6f8e">Structured FY16+</span> ${esc(cpu.name)}</div>
+      </div>
+      <div class="chartwrap"><canvas id="cmpChart"></canvas></div>
+      ${seamTxt?`<div class="note">${seamTxt}</div>`:''}
+      <div class="controls" style="margin-top:12px">
+        <button class="lbtn ok" onclick="cmpDecide('link')">✓ Same measure — link</button>
+        <button class="lbtn no" onclick="cmpDecide('reject')">✗ Not a match</button>
+        <span class="muted">Decision saved in your browser; export from the list when done.</span>
+      </div>
+    </div>`;
+  destroyChart('cmpChart');
+  charts['cmpChart']=new Chart($('#cmpChart'),{type:'line',data:{labels:yrs.map(String),datasets:[
+    {label:'PDF (FY11–15)',data:yrs.map(y=>rec.series[y]??null),borderColor:'#b9381f',borderWidth:2,tension:.2,spanGaps:false,pointRadius:3,backgroundColor:'transparent'},
+    {label:'Structured (FY16+)',data:yrs.map(y=>cand.series[y]??null),borderColor:'#2e6f8e',borderWidth:2,tension:.2,spanGaps:false,pointRadius:3,backgroundColor:'transparent'}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:true,labels:{usePointStyle:true,boxWidth:8,font:{size:11}}},
+        tooltip:{callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)}}},
+      scales:{x:{grid:{display:false,drawBorder:false},ticks:{font:{size:11}}},
+        y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},callback:v=>fmt(v)}}}}});
+}
+function cmpDecide(action){
+  const c=state.compare, m=mmrLinks();
+  m[c.ag+'||'+c.name]={agency:c.ag, pdf_name:c.name, action, target_key:c.key||'',
+    suggested_name:(BYKEY[c.key]||{}).name||''};
+  mmrSave(m); backFromDetail();
+}
+
+// "1998,1999,2000,2004" -> "FY1998–2000, FY2004"
+function yrRanges(ys){ ys=[...new Set(ys)].sort((a,b)=>a-b); if(!ys.length)return'';
+  let out=[],s=ys[0],p=ys[0];
+  for(let k=1;k<ys.length;k++){ if(ys[k]===p+1){p=ys[k];} else {out.push(s===p?'FY'+s:'FY'+s+'–'+p);s=p=ys[k];} }
+  out.push(s===p?'FY'+s:'FY'+s+'–'+p); return out.join(', '); }
+function agencyName(code){ const a=(META.agencies||[]).find(x=>x.code===code); return a?a.name:code; }
+
+function renderDetail(key){
+  const i=BYKEY[key], el=$('#tab-indicators');
+  if(!i){el.innerHTML='<p>Indicator not found.</p>';return;}
+  const pu=parseUnit(i.name);
+  const ys=yearsOf(i.series);
+  const sm=+META.structured_min;
+  let pnote='';
+  if(i.pdf_min&&i.pdf_min<sm){
+    pnote = i.pdf_link==='manual'
+        ? `Pre-FY${sm} history was <strong>linked by manual review</strong>${i.pdf_link_from?` (from PDF measure “${esc(i.pdf_link_from)}”)`:''} — treat with extra caution.`
+      : i.pdf_link==='auto-data'
+        ? `Pre-FY${sm} history <strong>auto-linked by name + data match</strong>${i.pdf_link_from?` (from PDF measure “${esc(i.pdf_link_from)}”)`:''} — verify.`
+      : i.pdf_link==='value-confirmed'
+        ? `Pre-FY${sm} history from PDF reports, matched to this measure by its FY${sm} value.`
+        : `Pre-FY${sm} history from archived PDF reports.`;
+  }
+  // per-measure provenance: which years came from which source, + any rename
+  const lastY=ys[ys.length-1];
+  let prov=`<li><strong>FY${sm}–${lastY}:</strong> NYC Open Data — MMR Agency Performance Indicators</li>`;
+  if(i.pdf_min&&i.pdf_min<sm){
+    const method=i.pdf_link==='exact'?'matched by identical name'
+      :i.pdf_link==='value-confirmed'?`matched to this measure by its FY${sm} value`
+      :i.pdf_link==='auto-data'?'auto-matched by name + data'
+      :i.pdf_link==='manual'?'linked by manual review'
+      :'extracted from the PDFs';
+    const renamed=i.pdf_link_from&&i.pdf_link_from.toLowerCase()!==pu.name.toLowerCase();
+    prov+=`<li><strong>FY${i.pdf_min}–${sm-1}:</strong> archived MMR PDF reports (${method})${renamed?`; reported then as “${esc(i.pdf_link_from)}”`:''}</li>`;
+  }
+  const hasGeo=i.geotypes&&i.geotypes.length;
+  // chronological source list: each pre-2016 year -> its MMR PDF; 2016+ -> Open Data
+  const pu_urls=META.pdf_urls||{};
+  const pdfYs=ys.filter(y=>y<sm), odYs=ys.filter(y=>y>=sm);
+  const sp=i.src_pages||{};
+  let srcList=pdfYs.map(y=>`<li>FY${y}: ${pu_urls[y]?`<a href="${pu_urls[y]}" target="_blank" rel="noopener">Mayor's Management Report (PDF)</a>`:'MMR PDF'}${sp[y]?` <span class="muted">p.${sp[y]}</span>`:''}</li>`).join('');
+  if(odYs.length) srcList+=`<li>FY${odYs[0]}–${odYs[odYs.length-1]}: <a href="${META.opendata_url}" target="_blank" rel="noopener">NYC Open Data</a></li>`;
+  const renameNote = (i.pdf_link_from&&i.pdf_link_from.toLowerCase()!==pu.name.toLowerCase())
+    ? `<div style="font-style:italic;color:var(--muted);font-size:12.5px;margin-top:5px">Reported FY${i.pdf_min}–${sm-1} as “${esc(i.pdf_link_from)}”.</div>`:'';
+  el.innerHTML=`<span class="backlink" onclick="backFromDetail()">← Back</span>
+    <div class="detail-head">
+      <div><h2>${esc(pu.name)}</h2>
+        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${i.retired?` <span class="placard" title="Flagged 'retired' in the city's own data. Number = last fiscal year it was reported.">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`:''}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}</div>
+        ${i.service?`<div class="ctx">${esc(i.service)}</div>`:''}</div>
+    </div>
+    <div class="row2">
+      <div class="panel">
+        <div class="chartwrap"><canvas id="detChart"></canvas></div>
+        ${i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Missing data: no value reported for FY${i.flags.join(', FY')} — a gap between years this measure otherwise reports. The line breaks across the gap rather than interpolating.</div>`:''}
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:8px">About this measure</h3>
+        ${i.desc?`<div class="def">${esc(i.desc)}</div>`:'<p class="muted">No definition in the source data.</p>'}
+        <div id="dirBox" style="margin:12px 0">${directionBox(i)}</div>
+        <ul class="tight">
+          ${i.source?`<li><strong>Source:</strong> ${esc(i.source)}</li>`:''}
+          ${i.freq?`<li><strong>Frequency:</strong> ${esc(i.freq)}</li>`:''}
+          ${i.period?`<li><strong>Reporting period:</strong> ${esc(i.period)}</li>`:''}
+        </ul>
+        <h3 style="margin:14px 0 4px">Source MMR(s)</h3>
+        <ul class="tight">${srcList}</ul>${renameNote}
+        ${(i.agencies&&i.agencies.length>1&&i.agency_years)?`<div class="note" style="margin-top:10px">Reported in more than one agency's chapter: ${i.agencies.map(c=>`<b>${esc(c)}</b> (${yrRanges(i.agency_years[c]||[])})`).join('; ')}. Where multiple agencies reported it in the same year, the figure was identical.</div>`:''}
+        ${(i.merged_names&&i.merged_names.length)?`<div class="note" style="margin-top:8px">This series combines records the city also published under: ${i.merged_names.map(n=>`“${esc(n)}”`).join('; ')} — identical values where they overlap.</div>`:''}
+      </div>
+    </div>
+    ${hasGeo?`<div class="panel"><h3 style="margin-bottom:4px">By neighborhood</h3>
+      <div class="sub">This measure is also reported at a geographic level.</div>
+      <div class="controls"><select id="geoType">${i.geotypes.map(g=>`<option value="${g}">${META.geotype_labels[g]||g}</option>`).join('')}</select>
+      <span class="muted" id="geoMsg">Loading…</span></div>
+      <div class="chartwrap"><canvas id="geoChart"></canvas></div>
+      <div class="note">Each line is one geographic unit.</div></div>`:''}`;
+
+  // continuous year axis (so a 2015->2020 gap shows as real chronological space)
+  const fy0=ys[0], fyN=ys[ys.length-1];
+  const fullYs=Array.from({length:fyN-fy0+1},(_,k)=>fy0+k);
+  const allInt=ys.every(y=>Number.isInteger(i.series[y]));   // whole-unit counts -> integer ticks
+  const fset=new Set(i.flags||[]);          // values flagged for review (kept, marked amber)
+  const cby=META.cpi_base_year;
+  const ds=[{label:i.is_dollar?'$ (nominal)':pu.name,data:fullYs.map(y=>i.series[y]??null),borderColor:'#b9381f',borderWidth:2,tension:.2,backgroundColor:'transparent',spanGaps:false,
+    pointRadius:fullYs.map(y=>i.series[y]==null?0:(fset.has(y)?6:(isPartial(y)?5:3))),
+    pointStyle:fullYs.map(y=>fset.has(y)?'triangle':(isPartial(y)?'rectRot':'circle')),
+    pointBackgroundColor:fullYs.map(y=>fset.has(y)?'#e8a200':(isPartial(y)?'#fff':'#b9381f')),
+    pointBorderColor:fullYs.map(y=>fset.has(y)?'#9a6a00':'#b9381f'),
+    segment:{borderDash:c=>(isPartial(fullYs[fullYs.length-1])&&c.p1DataIndex===fullYs.length-1)?[5,4]:undefined}}];
+  if(i.real){ds.push({label:`Inflation-adjusted (${cby} dollars)`,data:fullYs.map(y=>i.real[y]??null),borderColor:'#2e6f8e',borderWidth:2,borderDash:[5,3],pointRadius:0,tension:.2,backgroundColor:'transparent',spanGaps:false});}
+  if(i.targets){ds.push({label:'MMR target',data:fullYs.map(y=>i.targets[y]??null),borderColor:'#9a958a',borderWidth:1.5,borderDash:[4,4],pointStyle:'line',pointRadius:0,tension:.1,backgroundColor:'transparent',spanGaps:true});}
+  const yLabel=(pu.sfx&&pu.sfx.trim())||i.unit||'';
+  destroyChart('detChart');
+  charts['detChart']=new Chart($('#detChart'),{type:'line',data:{labels:fullYs.map(String),datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:!!(i.targets||i.real),labels:{usePointStyle:true,boxWidth:18,font:{size:11}}},
+        tooltip:{callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)+(isPartial(t.label)?' (prelim)':'')}}},
+      scales:{x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,font:{size:11}}},
+        y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},precision:allInt?0:undefined,callback:v=>fmt(v)},title:{display:!!yLabel,text:yLabel,font:{size:11}}}}}});
+  attachDirButtons();
+  if(hasGeo){ const sel=$('#geoType'); const load=()=>loadGeoChart(key,sel.value); sel.onchange=load; load(); }
+}
+
+async function loadGeoChart(key,gt){
+  let g=geoCache[key];
+  if(!g){try{g=await fetch('data/geo/'+key+'.json').then(r=>r.json());geoCache[key]=g;}catch(e){$('#geoMsg').textContent='No geographic data file.';return;}}
+  const units=g[gt]||{};
+  const pu=BYKEY[key]?parseUnit(BYKEY[key].name):{sfx:''};
+  const names=Object.keys(units).sort();
+  $('#geoMsg').textContent=names.length+' '+(META.geotype_labels[gt]||gt)+' units';
+  // union of years
+  const yset=new Set(); names.forEach(u=>Object.keys(units[u]).forEach(y=>yset.add(+y)));
+  const ys=[...yset].sort((a,b)=>a-b);
+  const palette=['#b9381f','#2e6f8e','#5a8a3c','#9a6a2e','#6d558f','#3c7d7a','#c0743a','#557'];
+  const ds=names.slice(0,40).map((u,idx)=>({label:u,data:ys.map(y=>units[u][y]??null),
+    borderColor:palette[idx%palette.length],borderWidth:1.2,pointRadius:0,tension:.2,backgroundColor:'transparent'}));
+  destroyChart('geoChart');
+  charts['geoChart']=new Chart($('#geoChart'),{type:'line',data:{labels:ys.map(String),datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:names.length<=8,position:'right',labels:{boxWidth:8,font:{size:10}}},
+        tooltip:{mode:'nearest',intersect:false,callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)}}},
+      scales:{x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,font:{size:11}}},
+        y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},callback:v=>fmt(v)}}}}});
+}
+
+/* ---------- NEIGHBORHOODS ---------- */
+let GEO_MEAS=null;
+async function renderNeighborhoods(){
+  const el=$('#tab-neighborhoods');
+  el.innerHTML=`<h2>Neighborhoods</h2><div class="sub">Loading geographic index…</div>`;
+  if(!GEO_INDEX){try{[GEO_INDEX,GEO_MEAS]=await Promise.all([
+    fetch('data/geo_index.json').then(r=>r.json()),
+    fetch('data/geo_measures.json').then(r=>r.json())]);}
+    catch(e){el.innerHTML+='<p>Could not load geo data.</p>';return;}}
+  const gtypes=Object.keys(GEO_INDEX);
+  el.innerHTML=`<h2>Neighborhoods</h2>
+    <div class="sub">Some measures are reported by place — community district, police precinct, school district, or borough. Pick a geography and a measure to see <b>every place at once</b>; click any line (or type a place) to highlight it.</div>
+    <div class="controls">
+      <label class="ctl">Geography <select id="ngType">${gtypes.map(g=>`<option value="${g}">${META.geotype_labels[g]||g}</option>`).join('')}</select></label>
+      <label class="ctl">Measure <select id="ngMeas" style="max-width:420px"></select></label>
+    </div>
+    <div id="ngHl" class="controls"></div>
+    <div id="ngDetail"></div>`;
+  const ty=$('#ngType'), ms=$('#ngMeas');
+  const measuresFor=gt=>{
+    // only measures reported across MULTIPLE places — the point here is comparison,
+    // so drop anything tracked for a single district (nothing to compare it to).
+    const cnt={};
+    Object.entries(GEO_INDEX[gt]||{}).forEach(([u,ks])=>{if(u!=='unit')ks.forEach(k=>{cnt[k]=(cnt[k]||0)+1;});});
+    const minU=gt==='B'?2:3;
+    return Object.keys(cnt).filter(k=>cnt[k]>=minU).map(k=>GEO_MEAS[k]).filter(Boolean)
+      .sort((a,b)=>sortName(a).localeCompare(sortName(b)));
+  };
+  const fillMeas=()=>{
+    const list=measuresFor(ty.value);
+    ms.innerHTML=list.map(m=>`<option value="${m.key}">${esc(parseUnit(m.name).name)} — ${m.agency}</option>`).join('');
+    start();
+  };
+  const start=()=>{ window._ngHl=new Set(); showGeoAll(ms.value, ty.value); };
+  ty.onchange=fillMeas; ms.onchange=start; fillMeas();
+}
+const NG_PAL=['#b9381f','#2e6f8e','#5a8a3c','#9a6a2e','#6d558f','#c98a1b','#1f7a6d','#a23b5e'];
+async function showGeoAll(key,gt){
+  const m=GEO_MEAS[key], d=$('#ngDetail');
+  if(!m){d.innerHTML='';$('#ngHl').innerHTML='';return;}
+  d.innerHTML=`<div class="panel"><div class="loading">Loading…</div></div>`;
+  let g=geoCache[key];
+  if(!g){try{g=await fetch('data/geo/'+key+'.json').then(r=>r.json());geoCache[key]=g;}catch(e){d.innerHTML='<div class="panel">No data file.</div>';return;}}
+  const pu=parseUnit(m.name);
+  const units=Object.keys(g[gt]||{}).filter(u=>u!=='unit').sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  const yset=new Set(); units.forEach(u=>Object.keys(g[gt][u]).forEach(y=>yset.add(+y)));
+  const ys=[...yset].sort((a,b)=>a-b);
+  const hl=window._ngHl||(window._ngHl=new Set());
+  const few=units.length<=6;                 // boroughs: colour every line
+  const med=ys.map(y=>{const v=units.map(u=>g[gt][u][y]).filter(x=>x!=null).sort((a,b)=>a-b);return v.length?v[Math.floor((v.length-1)/2)]:null;});
+  const datasets=units.map((u,ix)=>{
+    const on=few||hl.has(u);
+    const ci=few?ix:[...hl].indexOf(u);
+    return {label:u,data:ys.map(y=>g[gt][u][y]??null),
+      borderColor:on?NG_PAL[ci%NG_PAL.length]:'rgba(120,120,120,.16)',
+      borderWidth:on?2.2:1,pointRadius:0,tension:.2,backgroundColor:'transparent',order:on?1:3};
+  });
+  if(!few)datasets.push({label:'Median place',data:med,borderColor:'#222',borderWidth:2,borderDash:[6,3],pointRadius:0,tension:.2,backgroundColor:'transparent',order:2});
+  // highlight UI: type-to-search + removable chips for the ones picked (no wall of buttons)
+  const sel=[...hl].map(u=>`<button class="chip on" title="remove" onclick="ngToggle('${key}','${gt}',decodeURIComponent('${encodeURIComponent(u)}'))">${esc(u)} ✕</button>`).join('');
+  $('#ngHl').innerHTML = few ? '' :
+    `<input type="text" id="ngSearch" list="ngUnits" placeholder="Type a place to highlight…" style="min-width:230px">
+     <datalist id="ngUnits">${units.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>${sel}
+     ${hl.size?`<button class="chip" onclick="window._ngHl=new Set();showGeoAll('${key}','${gt}')">clear all</button>`:''}`;
+  const si=$('#ngSearch');
+  if(si) si.onchange=()=>{const v=si.value.trim(); if(units.includes(v)){hl.add(v); showGeoAll(key,gt);}};
+  const dirTxt=m.dir==='Down'?'Lower is better':m.dir==='Up'?'Higher is better':'';
+  d.innerHTML=`<div class="panel"><h3 style="margin-bottom:3px">${esc(pu.name)}</h3>
+    <div class="sub">${esc(m.agency_name)} · ${esc(META.geotype_labels[gt]||gt)} · ${units.length} place${units.length>1?'s':''}</div>
+    <div class="chartwrap" style="height:360px"><canvas id="ngChart"></canvas></div>
+    <div class="note">${dirTxt?dirTxt+'. ':''}${few?'One line per place.':'Each faint line is one place; the dashed black line is the median place. Click any line to highlight it.'}</div>
+    ${(m.flag_years&&m.flag_years[gt])?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ FY${m.flag_years[gt].join(', FY')}: every place is far out of line with other years — either incomplete reporting (the place-level breakdown can lag the citywide figure) or a source data-entry error, not a real swing. Shown as reported.</div>`:''}</div>`;
+  destroyChart('ngChart');
+  charts['ngChart']=new Chart($('#ngChart'),{type:'line',data:{labels:ys.map(String),datasets},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,spanGaps:true,
+      onClick:(e,els,chart)=>{const p=chart.getElementsAtEventForMode(e,'nearest',{intersect:false},true);
+        if(p.length){const u=chart.data.datasets[p[0].datasetIndex].label;
+          if(u&&u!=='Median place'){hl.has(u)?hl.delete(u):hl.add(u);showGeoAll(key,gt);}}},
+      plugins:{legend:{display:few,labels:{usePointStyle:true,boxWidth:8,font:{size:11}}},
+        tooltip:{mode:'nearest',intersect:false,
+          callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)}}},
+      scales:{x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,font:{size:11}}},
+        y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},callback:v=>fmt(v)}}}}});
+}
+function ngToggle(key,gt,u){const h=window._ngHl;h.has(u)?h.delete(u):h.add(u);showGeoAll(key,gt);}
+
+/* ---------- ABOUT ---------- */
+function renderAbout(){
+  const cby=META.cpi_base_year||'';
+  $('#tab-about').innerHTML=`<h2>About</h2>
+  <div class="panel">
+    <p>The Mayor's Management Report is New York City's account of how its agencies are performing, published since 1977 as required by the City Charter. This tool brings those measures together — ${META.n_indicators.toLocaleString()} of them across ${META.n_agencies} agencies, spanning fiscal years ${META.fy_min} to ${META.fy_max} — and lets you follow each one over time, by agency, and by neighborhood.</p>
+
+    <h3>Where the data comes from</h3>
+    <p>Figures for FY${META.structured_min||2016} onward come from the city's machine-readable MMR on NYC Open Data (dataset <code>rbed-zzin</code>). Earlier years come from the archived MMR PDFs, which we extracted measure by measure. For each year we use the fiscal-year-end value the city reported for that measure.</p>
+
+    <h3>What we did to the data</h3>
+    <ul class="tight">
+      <li><strong>Joined the PDF and machine-readable records.</strong> The two name many of the same measures differently. We match a PDF measure to its machine-readable counterpart only when their values agree across the years they overlap — a fingerprint, not a guess — so a measure's history stays continuous even when its name changed.</li>
+      <li><strong>Merged duplicate listings.</strong> The city often prints the same figure more than once — under a slightly different name within an agency, or in two places at once. In particular, the MMR's mayoral "Blueprint" sections (Vision Zero, the Child Care and Housing Blueprints, the gun-violence and recovery plans) re-report numbers that an operating agency already publishes — e.g. traffic deaths appear under both the Department of Transportation and Vision Zero. We keep a single series for each such measure, attributed to both the agency and the initiative. Where two operating agencies report genuinely different figures, we keep them separate.</li>
+      <li><strong>Corrected unit changes.</strong> A few dollar measures switched from thousands of dollars to whole dollars mid-stream without a rename; we put the whole series in one unit.</li>
+      <li><strong>Adjusted for inflation.</strong> Dollar measures carry a second line in constant ${cby} dollars, using the federal CPI-U.</li>
+      <li><strong>Flagged what looks wrong.</strong> Values far out of line with the rest of a series are marked (⚠) for review rather than removed; the underlying number is always shown as the city reported it.</li>
+      <li><strong>Left out the current, in-progress year.</strong> The mid-year report covers only part of the year, so including it would read as a false decline.</li>
+    </ul>
+
+    <p class="note" style="margin-top:14px">Source: NYC Open Data and the archived Mayor's Management Reports. Inflation: U.S. Bureau of Labor Statistics, CPI-U. A Vital City project.</p>
+  </div>`;
+}
+
+/* ---------- boot ---------- */
+async function boot(){
+  try{
+    [META,INDS]=await Promise.all([
+      fetch('data/meta.json').then(r=>r.json()),
+      fetch('data/indicators.json').then(r=>r.json())
+    ]);
+    INDS.forEach(i=>BYKEY[i.key]=i);
+    const pal=['#b9381f','#2e6f8e','#5a8a3c','#9a6a2e','#6d558f','#3c7d7a'];
+    META.domains.forEach((d,idx)=>DOMAIN_COLOR[d]=pal[idx%pal.length]);
+    $('#hdrTitle').textContent=`New York City Performance Tracker • ${META.fy_min}–${META.fy_max}`;
+    state=readHash();
+    render();
+  }catch(e){
+    $('#tab-overview').innerHTML='<div class="loading">Could not load data. If viewing locally, serve the folder over http (e.g. <code>python3 -m http.server</code>) rather than opening the file directly.</div>';
+    console.error(e);
+  }
+}
+window.addEventListener('hashchange',()=>{const s=readHash();if(s.tab!==state.tab||s.key!==state.key||s.agency!==state.agency||s.domain!==state.domain){state=s;render();}});
+boot();
+</script>
+</body>
+</html>
