@@ -281,12 +281,18 @@ function effDir(ind){ return dirOverrides()[ind.key] || ind.dir; }
 function dlDirs(){ const m=dirOverrides();
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(m,null,2)],{type:'application/json'}));
   a.download='mmr_direction_decisions.json'; a.click(); }
+function salienceBadge(i){
+  if(!i.salience) return '';
+  const bg=i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df';
+  const v=i.valence&&i.valence!=='neutral'?' · up is '+(i.valence==='good'?'good':'bad'):'';
+  return `<span class="placard" style="background:${bg};color:#5a463c" title="${esc(i.salience_why||'')}${v}">${i.salience} salience</span> `;
+}
 function directionBox(i){
   const d=effDir(i), ov=dirOverrides()[i.key], n=Object.keys(dirOverrides()).length;
   const lbl=d==='Down'?'↓ Lower is better':d==='Up'?'↑ Higher is better':'— no directional goal';
   const cls=d==='None'?'muted':'dirgood';
-  // label only; click it to reveal the edit controls (hidden otherwise)
-  return `<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':''}
+  // salience (our interpretation) sits with the direction (also our interpretation)
+  return `${salienceBadge(i)}<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':''}
     <div id="dirBtns" data-key="${i.key}" style="display:none;margin-top:6px">
       <button class="lbtn" data-dir="Up">↑ higher</button><button class="lbtn" data-dir="Down">↓ lower</button><button class="lbtn" data-dir="None">– neutral</button>${ov?` <button class="lbtn" data-dir="clear">reset</button>`:''}${n?` <button class="lbtn" onclick="dlDirs()" title="export all direction edits">⬇ ${n}</button>`:''}
     </div>`;
@@ -381,8 +387,22 @@ function computeNotable(){
   return {imp:out.filter(o=>o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)),
           wor:out.filter(o=>!o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct))};
 }
+function diversifyByDomain(arr,n,capPer){
+  // arr is sorted by |pct| desc. Take the biggest movers but cap how many come
+  // from any one domain, so the spotlight spans education/health/safety/etc.
+  // rather than filling up with life-and-death agencies. Backfill if too few.
+  const out=[], cnt={};
+  for(const o of arr){
+    const k=o.i.domain||o.i.agency;
+    if((cnt[k]||0)>=capPer) continue;
+    cnt[k]=(cnt[k]||0)+1; out.push(o);
+    if(out.length>=n) break;
+  }
+  if(out.length<n) for(const o of arr){ if(!out.includes(o)){ out.push(o); if(out.length>=n) break; } }
+  return out;
+}
 function notableList(arr,good){
-  return arr.slice(0,8).map(o=>{const pu=parseUnit(o.i.name);
+  return diversifyByDomain(arr,8,2).map(o=>{const pu=parseUnit(o.i.name);
     const arrow=o.pct>0?'▲':'▼', col=good?'#3c7d7a':'#b9381f';
     return `<tr onclick="openIndicator('${o.i.key}')">
       <td>${esc(pu.name)} <span class="muted">· ${o.i.agency}</span></td>
@@ -394,7 +414,7 @@ function notablePanel(){
   if(!imp.length&&!wor.length) return '';
   return `<div class="panel">
     <h2>Notable changes</h2>
-    <div class="sub">The largest sustained moves in measures with a clear better/worse direction (first vs. last 3 years of the recent window). Click any to open it.</div>
+    <div class="sub">The largest sustained moves in high-salience measures with a clear better/worse direction — spread across topic areas (first vs. last 3 years of the recent window). Click any to open it.</div>
     <div class="row2" style="margin-top:12px">
       <div><div class="ctl" style="color:#3c7d7a;font-weight:600;margin-bottom:6px">▲ Improving</div>
         <table class="ntable"><tbody>${notableList(imp,true)}</tbody></table></div>
@@ -745,7 +765,7 @@ function renderDetail(key){
   el.innerHTML=`<span class="backlink" onclick="backFromDetail()">← Back</span>
     <div class="detail-head">
       <div><h2>${esc(pu.name)}</h2>
-        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${i.retired?` <span class="placard" title="Flagged 'retired' in the city's own data. Number = last fiscal year it was reported.">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`:''}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}${i.salience?` <span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}${i.valence&&i.valence!=='neutral'?' · up is '+(i.valence==='good'?'good':'bad'):''}">${i.salience} salience</span>`:''}</div>
+        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${i.retired?` <span class="placard" title="Flagged 'retired' in the city's own data. Number = last fiscal year it was reported.">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`:''}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}</div>
         ${i.service?`<div class="ctx">${esc(i.service)}</div>`:''}</div>
     </div>
     <div class="row2">
