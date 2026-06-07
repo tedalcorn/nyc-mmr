@@ -726,10 +726,10 @@ function renderDetail(key){
   // values come from a later edition's 5-year look-back, so we cite that edition (with
   // its page) — never an MMR that merely happened to share the fiscal year.
   const pu_urls=META.pdf_urls||{};
-  const odYs=ys.filter(y=>y>=sm), prov=i.pdf_prov||{};
+  const odYs=ys.filter(y=>y>=sm), provMap=i.pdf_prov||{};
   const byEd={};
   for(const y of ys.filter(y=>y<sm)){
-    const p=prov[y]; if(!p) continue;
+    const p=provMap[y]; if(!p) continue;
     const ed=p[0], pg=p[1];
     (byEd[ed]=byEd[ed]||{pg:pg,years:[]}).years.push(+y);
   }
