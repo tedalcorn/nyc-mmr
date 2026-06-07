@@ -406,25 +406,27 @@ function diversifyByDomain(arr,n,capPer){
   if(out.length<n) for(const o of arr){ if(!out.includes(o)){ out.push(o); if(out.length>=n) break; } }
   return out;
 }
-function notableList(arr,good){
-  return diversifyByDomain(arr,8,2).map(o=>{const pu=parseUnit(o.i.name);
+function notableRows(items,good,padTo){
+  let h=items.map(o=>{const pu=parseUnit(o.i.name);
     const arrow=o.pct>0?'▲':'▼', col=good?'#3c7d7a':'#b9381f';
     return `<tr onclick="openIndicator('${o.i.key}')">
       <td>${esc(pu.name)} <span class="muted">· ${o.i.agency}</span></td>
       <td style="text-align:right;white-space:nowrap;color:${col};font-weight:600">${arrow} ${Math.abs(Math.round(o.pct*100))}%</td>
       <td class="muted" style="text-align:right;white-space:nowrap">FY${String(o.y0).slice(2)}→${String(o.y1).slice(2)}</td></tr>`;}).join('');
+  for(let k=items.length;k<padTo;k++) h+='<tr aria-hidden="true"><td>&nbsp;</td><td></td><td></td></tr>';  // pad so both columns are equal height
+  return h;
 }
 function notablePanel(){
   const {imp,wor}=computeNotable();
   if(!imp.length&&!wor.length) return '';
+  const I=diversifyByDomain(imp,8,2), W=diversifyByDomain(wor,8,2), pad=Math.max(I.length,W.length);
   return `<div class="panel">
     <h2>Notable changes</h2>
-    <div class="sub">The largest sustained moves in high-salience measures with a clear better/worse direction — spread across topic areas (first vs. last 3 years of the recent window). Click any to open it.</div>
     <div class="row2" style="margin-top:12px">
       <div><div class="ctl" style="color:#3c7d7a;font-weight:600;margin-bottom:6px">▲ Improving</div>
-        <table class="ntable"><tbody>${notableList(imp,true)}</tbody></table></div>
+        <table class="ntable"><tbody>${notableRows(I,true,pad)}</tbody></table></div>
       <div><div class="ctl" style="color:#b9381f;font-weight:600;margin-bottom:6px">▼ Worsening</div>
-        <table class="ntable"><tbody>${notableList(wor,false)}</tbody></table></div>
+        <table class="ntable"><tbody>${notableRows(W,false,pad)}</tbody></table></div>
     </div></div>`;
 }
 function renderOverview(){
@@ -512,64 +514,55 @@ function renderAgency(code){
 /* ---------- INDICATORS (explore + detail) ---------- */
 function renderIndicators(){
   const el=$('#tab-indicators');
-  const smin=+META.structured_min||+META.fy_min;
   el.innerHTML=`<div class="controls">
       <input type="text" id="q" placeholder="Search indicators…" value="${esc(state.q||'')}">
       <select id="fDomain"><option value="">All topics</option>${META.domains.map(d=>`<option>${esc(d)}</option>`).join('')}</select>
       <select id="fAgency"><option value="">All agencies</option>${META.agencies.map(a=>`<option value="${a.code}">${esc(a.name)}</option>`).join('')}</select>
-      <select id="fCov">
-        <option value="">All measures</option>
-        <option value="hist">Has pre-${smin} history</option>
-        <option value="struct">Structured only (no history yet)</option>
-        <option value="unmatched">Unmatched PDF — to link</option>
+      <select id="fSal">
+        <option value="">All salience</option>
+        <option value="high">High salience</option>
+        <option value="medium">Medium salience</option>
+        <option value="low">Low salience</option>
       </select>
     </div>
     <div id="indTable"></div>`;
-  const q=$('#q'),fd=$('#fDomain'),fa=$('#fAgency'),fc=$('#fCov');
-  fd.value=state.fdom||''; fa.value=state.fag||''; fc.value=state.fcov||'';  // restore on Back
-  const upd=async()=>{
-    state.q=q.value; state.fdom=fd.value; state.fag=fa.value; state.fcov=fc.value;
+  const q=$('#q'),fd=$('#fDomain'),fa=$('#fAgency'),fs=$('#fSal');
+  fd.value=state.fdom||''; fa.value=state.fag||''; fs.value=state.fsal||'';  // restore on Back
+  const upd=()=>{
+    state.q=q.value; state.fdom=fd.value; state.fag=fa.value; state.fsal=fs.value;
     const term=q.value.trim().toLowerCase();
     const byText=x=>!term||(x.name||'').toLowerCase().includes(term)||(x.agency_name||'').toLowerCase().includes(term);
-    if(fc.value==='unmatched'){
-      if(!HIST_UNMATCHED){try{HIST_UNMATCHED=await fetch('data/historical_unmatched.json').then(r=>r.json());}catch(e){HIST_UNMATCHED=[];}}
-      let r=HIST_UNMATCHED.filter(byText);
-      if(fd.value)r=r.filter(x=>x.domain===fd.value);
-      if(fa.value)r=r.filter(x=>x.agency===fa.value);
-      const dec=mmrLinks();
-      const decidedCount=r.filter(x=>dec[x.agency+'||'+x.name]).length;
-      if(!state.showDecided) r=r.filter(x=>!dec[x.agency+'||'+x.name]);  // skip decided
-      r=r.slice().sort((a,b)=>sortName(a).localeCompare(sortName(b)));
-      $('#indTable').innerHTML=unmatchedTable(r,decidedCount);
-      attachSortable(); attachLinkButtons(); updateLinkBar(); writeHash(); restorePendingScroll(); return;
-    }
     let r=INDS.filter(byText);
     if(fd.value)r=r.filter(i=>i.domain===fd.value);
     if(fa.value)r=r.filter(i=>i.agency===fa.value);
-    if(fc.value==='hist')r=r.filter(i=>i.pdf_min&&i.pdf_min<smin);
-    if(fc.value==='struct')r=r.filter(i=>!(i.pdf_min&&i.pdf_min<smin));
+    if(fs.value)r=r.filter(i=>i.salience===fs.value);
     r=r.slice().sort((a,b)=>sortName(a).localeCompare(sortName(b)));
     $('#indTable').innerHTML=indicatorTable(r,true);
     attachSortable();
     writeHash(); restorePendingScroll();
   };
-  q.oninput=upd; fd.onchange=upd; fa.onchange=upd; fc.onchange=upd; window._indUpd=upd; upd();
+  q.oninput=upd; fd.onchange=upd; fa.onchange=upd; fs.onchange=upd; window._indUpd=upd; upd();
 }
 
 function indicatorTable(list,showAgency){
   if(!list.length)return '<p class="muted" style="padding:14px">No indicators match.</p>';
-  return `<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
+  const SR={high:3,medium:2,low:1};
+  return `<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col style="width:90px"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
     <th data-sort="text">Indicator</th><th${showAgency?' data-sort="text"':''}>${showAgency?'Agency':''}</th>
     <th data-sort="num" title="Click to sort by how long it has been tracked (longest first)"></th>
-    <th data-sort="num">Change</th><th data-sort="num" title="Retired = no longer reported">Status</th>
+    <th data-sort="num">Change</th>
+    <th data-sort="num" title="Inferred salience — how much the measure matters to the public. Click to sort high-first.">Salience</th>
+    <th data-sort="num" title="Retired = no longer reported">Status</th>
     <th data-sort="num" title="⚠ = the series is missing data internally (a gap between years it otherwise reports). Click to sort flagged-first.">⚠</th></tr></thead><tbody>
     ${list.map(i=>{
       const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name);
       const nf=i.flags?i.flags.length:0;
+      const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
       return `<tr onclick="openIndicator('${i.key}')">
         <td data-sortval="${esc(sortName(i))}">${esc(pu.name)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
         <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
         <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
+        <td data-sortval="${SR[i.salience]||0}">${sb}</td>
         <td data-sortval="${i.retired?y1:''}">${i.retired?`<span class="placard" title="No longer reported">Retired '${String(y1).slice(2)}</span>`:''}</td>
         <td data-sortval="${nf?-nf:''}" style="text-align:center">${nf?`<span style="color:#c98a1b;font-size:14px" title="Missing data internally — no value for FY${i.flags.join(', FY')} (gap between reported years)">⚠</span>`:''}</td></tr>`;
     }).join('')}</tbody></table>`;
@@ -956,8 +949,6 @@ function renderAbout(){
     </ul>
 
     <p>The complexity of these processes creates opportunities to introduce errors, so all data included in the tracker should be interpreted cautiously. It is designed to be transparent about the source of the assembled data, including links and page numbers for the PDFs from which it is sourced. Indicators with discontinuities or that exhibit unusual patterns are flagged for manual review (⚠).</p>
-
-    <p class="note" style="margin-top:14px">Sources: NYC Open Data and the archived Mayor's Management Reports; inflation from the U.S. Bureau of Labor Statistics, CPI-U. A Vital City project.</p>
   </div>`;
 }
 
