@@ -277,7 +277,11 @@ function trendInner(series,sfx){
 // desired-direction overrides (when the data lacks one, or it's wrong) — saved in
 // the browser, exportable to config/manual_directions.json for the build to bake in.
 function dirOverrides(){ try{return JSON.parse(localStorage.getItem('mmr_dir')||'{}');}catch(e){return {};} }
-function effDir(ind){ return dirOverrides()[ind.key] || ind.dir; }
+// the MMR often omits a desired direction; fall back to the salience pass's
+// valence (up-is-good / up-is-bad) so we can still judge better/worse. neutral -> none.
+function valDir(ind){ return ind.valence==='good'?'Up':ind.valence==='bad'?'Down':null; }
+function effDir(ind){ return dirOverrides()[ind.key] || ind.dir || valDir(ind) || 'None'; }
+function dirInferred(ind){ return !dirOverrides()[ind.key] && !ind.dir && !!valDir(ind); }
 function dlDirs(){ const m=dirOverrides();
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(m,null,2)],{type:'application/json'}));
   a.download='mmr_direction_decisions.json'; a.click(); }
@@ -292,7 +296,7 @@ function directionBox(i){
   const lbl=d==='Down'?'↓ Lower is better':d==='Up'?'↑ Higher is better':'— no directional goal';
   const cls=d==='None'?'muted':'dirgood';
   // salience (our interpretation) sits with the direction (also our interpretation)
-  return `${salienceBadge(i)}<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':''}
+  return `${salienceBadge(i)}<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':dirInferred(i)?' <span class="muted" style="font-size:11px" title="The MMR sets no desired direction; inferred from what the measure tracks.">(inferred)</span>':''}
     <div id="dirBtns" data-key="${i.key}" style="display:none;margin-top:6px">
       <button class="lbtn" data-dir="Up">↑ higher</button><button class="lbtn" data-dir="Down">↓ lower</button><button class="lbtn" data-dir="None">– neutral</button>${ov?` <button class="lbtn" data-dir="clear">reset</button>`:''}${n?` <button class="lbtn" onclick="dlDirs()" title="export all direction edits">⬇ ${n}</button>`:''}
     </div>`;
@@ -366,7 +370,8 @@ function computeNotable(){
   INDS.forEach(i=>{
     if(i.salience!=='high') return;                          // spotlight only the measures that matter most
     if(i.flags&&i.flags.length) return;                      // any uninvestigated discontinuity -> not "fully captured"
-    if(i.dir!=='Up'&&i.dir!=='Down') return;
+    const ed=effDir(i);                                       // MMR direction, else inferred from valence
+    if(ed!=='Up'&&ed!=='Down') return;
     if(/cumulative|to date|to-date/i.test(i.name)) return;   // cumulative measures only ever rise — not a real "change"
     const ys=yearsOf(i.series); if(ys.length<6) return;
     if(ys[0]>2014) return;                                     // established measures only (not new-program ramp-ups)
@@ -381,7 +386,7 @@ function computeNotable(){
     if(v0==null||v1==null||Math.abs(v0)<3) return;
     const pct=(v1-v0)/Math.abs(v0);
     if(Math.abs(pct)<0.20||Math.abs(pct)>5) return;            // meaningful, but not low-base noise
-    const better=i.dir==='Up'?pct>0:pct<0;
+    const better=ed==='Up'?pct>0:pct<0;
     out.push({i,y0:win[0],y1,v0,v1,pct,better});
   });
   return {imp:out.filter(o=>o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)),
