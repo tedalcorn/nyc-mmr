@@ -878,12 +878,13 @@ function renderDetail(key){
     pointBackgroundColor:fullYs.map(y=>fset.has(y)?'#e8a200':(isPartial(y)?'#fff':'#b9381f')),
     pointBorderColor:fullYs.map(y=>fset.has(y)?'#9a6a00':'#b9381f'),
     segment:{borderDash:c=>(isPartial(fullYs[fullYs.length-1])&&c.p1DataIndex===fullYs.length-1)?[5,4]:undefined}}];
-  if(i.real){ds.push({label:`Inflation-adjusted (${cby} dollars)`,data:fullYs.map(y=>i.real[y]??null),borderColor:'#2e6f8e',borderWidth:2,borderDash:[5,3],pointRadius:0,tension:.2,backgroundColor:'transparent',spanGaps:false});}
+  if(i.real){ds.push({label:`Inflation-adjusted (${cby} dollars)`,data:fullYs.map(y=>i.real[y]??null),borderColor:'#2e6f8e',borderWidth:2,borderDash:[5,3],pointRadius:fullYs.map(y=>i.real[y]==null?0:2.5),pointHoverRadius:5,pointBackgroundColor:'#2e6f8e',pointBorderColor:'#2e6f8e',tension:.2,backgroundColor:'transparent',spanGaps:false});}
   if(i.targets){ds.push({label:'MMR target',data:fullYs.map(y=>i.targets[y]??null),borderColor:'#9a958a',borderWidth:1.5,borderDash:[4,4],pointStyle:'line',pointRadius:0,tension:.1,backgroundColor:'transparent',spanGaps:true});}
   const yLabel=(pu.sfx&&pu.sfx.trim())||i.unit||'';
   destroyChart('detChart');
   charts['detChart']=new Chart($('#detChart'),{type:'line',data:{labels:fullYs.map(String),datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},   // hover any year -> show nominal + inflation-adjusted + target together
       plugins:{legend:{display:!!(i.targets||i.real),labels:{usePointStyle:true,boxWidth:18,font:{size:11}}},
         tooltip:{callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)+(isPartial(t.label)?' (prelim)':'')}}},
       scales:{x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,font:{size:11}}},
