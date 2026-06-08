@@ -136,10 +136,11 @@ function parseUnit(name){
   const raw=m[1].trim(), low=raw.toLowerCase(); let sfx=null;
   if(raw==='%'||low==='percent') sfx='%';
   else if(/^(days?|minutes?|min|hours?|hrs?|months?|years?|yrs?|weeks?|seconds?|secs?)$/.test(low)) sfx=' '+raw;
+  else if(raw==='$'||low==='dollars'||low==='dollar') sfx='$';   // dollar amounts -> '$' prefix
   if(sfx==null) return {name,sfx:''};
   return {name:name.slice(0,m.index).trim(), sfx};
 }
-const fmtU=(v,sfx)=>v==null?'—':fmt(v)+(sfx||'');
+const fmtU=(v,sfx)=>v==null?'—':(sfx==='$'?'$'+fmt(v):fmt(v)+(sfx||''));
 // sort key that ignores leading punctuation (so "(Average…" / "-Foo" sort by letter)
 const sortName=i=>(i.name||'').replace(/^[^a-z0-9]+/i,'').toLowerCase();
 
@@ -280,8 +281,11 @@ function dirOverrides(){ try{return JSON.parse(localStorage.getItem('mmr_dir')||
 // the MMR often omits a desired direction; fall back to the salience pass's
 // valence (up-is-good / up-is-bad) so we can still judge better/worse. neutral -> none.
 function valDir(ind){ return ind.valence==='good'?'Up':ind.valence==='bad'?'Down':null; }
-function effDir(ind){ return dirOverrides()[ind.key] || ind.dir || valDir(ind) || 'None'; }
-function dirInferred(ind){ return !dirOverrides()[ind.key] && !ind.dir && !!valDir(ind); }
+// the MMR direction is only useful when it's a real Up/Down; 'None'/'Neutral'/blank
+// are non-directional, so fall through to the salience valence in those cases.
+function mmrDir(ind){ const d=dirOverrides()[ind.key]||ind.dir; return (d==='Up'||d==='Down')?d:null; }
+function effDir(ind){ return mmrDir(ind) || valDir(ind) || 'None'; }
+function dirInferred(ind){ return !mmrDir(ind) && !!valDir(ind); }
 function dlDirs(){ const m=dirOverrides();
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(m,null,2)],{type:'application/json'}));
   a.download='mmr_direction_decisions.json'; a.click(); }
@@ -364,54 +368,50 @@ function attachSortable(){
 // the biggest sustained moves in measures that have a "good direction", framed
 // as improvement or deterioration (median of first 3 vs last 3 years of a recent
 // window). Skips flagged endpoints, tiny bases, short/retired series.
-function computeNotable(){
-  const maxY=+META.fy_max, out=[];
+function scoreMove(i,relaxed){
+  // score one measure's recent move (median of first 3 vs last 3 years of the last
+  // ~10). relaxed=true skips the spotlight gates (salience/recency/threshold) — used
+  // for PINNED measures we always want shown, however they happen to have moved.
+  const maxY=+META.fy_max;
   const med=a=>{a=[...a].sort((x,y)=>x-y);return a.length?a[Math.floor((a.length-1)/2)]:null;};
-  INDS.forEach(i=>{
-    if(i.salience!=='high') return;                          // spotlight only the measures that matter most
-    if(i.flags&&i.flags.length) return;                      // any uninvestigated discontinuity -> not "fully captured"
-    const ed=effDir(i);                                       // MMR direction, else inferred from valence
-    if(ed!=='Up'&&ed!=='Down') return;
-    if(/cumulative|to date|to-date/i.test(i.name)) return;   // cumulative measures only ever rise — not a real "change"
-    const ys=yearsOf(i.series); if(ys.length<6) return;
-    if(ys[0]>2014) return;                                     // established measures only (not new-program ramp-ups)
-    const y1=ys[ys.length-1]; if(maxY-y1>1) return;            // current-ish only
-    const fset=new Set(i.flags||[]);
-    const win=ys.filter(y=>y>=y1-10);                          // last ~10 yrs
-    if(win.length<6) return;
-    const early=win.slice(0,3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
-    const late=win.slice(-3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
-    if(early.length<2||late.length<2) return;
-    const v0=med(early), v1=med(late);
-    if(v0==null||v1==null||Math.abs(v0)<3) return;
-    const pct=(v1-v0)/Math.abs(v0);
-    if(Math.abs(pct)<0.20||Math.abs(pct)>5) return;            // meaningful, but not low-base noise
-    const better=ed==='Up'?pct>0:pct<0;
-    out.push({i,y0:win[0],y1,v0,v1,pct,better});
-  });
+  const ed=effDir(i); if(ed!=='Up'&&ed!=='Down') return null;
+  if(/cumulative|to date|to-date/i.test(i.name)) return null;
+  if(!relaxed){
+    if(i.salience!=='high') return null;
+    if(i.flags&&i.flags.length) return null;
+  }
+  const ys=yearsOf(i.series); if(ys.length<6) return null;
+  if(!relaxed && ys[0]>2014) return null;
+  const y1=ys[ys.length-1]; if(!relaxed && maxY-y1>1) return null;
+  const fset=new Set(i.flags||[]);
+  const win=ys.filter(y=>y>=y1-10); if(win.length<6) return null;
+  const early=win.slice(0,3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
+  const late=win.slice(-3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
+  if(early.length<2||late.length<2) return null;
+  const v0=med(early), v1=med(late);
+  if(v0==null||v1==null||Math.abs(v0)<3) return null;
+  const pct=(v1-v0)/Math.abs(v0);
+  if(!relaxed && (Math.abs(pct)<0.20||Math.abs(pct)>5)) return null;
+  const better=ed==='Up'?pct>0:pct<0;
+  return {i,y0:win[0],y1,v0,v1,pct,better};
+}
+function computeNotable(){
+  const out=[];
+  INDS.forEach(i=>{const o=scoreMove(i,false); if(o) out.push(o);});
   return {imp:out.filter(o=>o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)),
           wor:out.filter(o=>!o.better).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct))};
 }
-// Curated measures pinned to the overview regardless of whether they're big
-// "movers" — edit this list to feature/elevate specific indicators.
-const FEATURED=[
+// Measures we always want shown in Notable Changes (in whichever column their
+// recent move puts them), even if they'd otherwise be crowded out. Edit to pin/unpin.
+const PINNED=[
   'dhs-average-number-of-single-adults-in-shelters-per-day',
   'acs-average-number-of-children-in-foster-care',
   'doe-average-expenditure-per-student',
   'pdf-nycha-average-turnaround-days-for-vacant-apartments',
 ];
-function featuredPanel(){
+function pinnedMoves(){
   const byk={}; INDS.forEach(i=>byk[i.key]=i);
-  const items=FEATURED.map(k=>byk[k]).filter(Boolean);
-  if(!items.length) return '';
-  return `<div class="panel"><h2>Key indicators to watch</h2>
-    <table class="ntable"><tbody>${items.map(i=>{
-      const pu=parseUnit(i.name), ys=yearsOf(i.series), y1=ys[ys.length-1], v=i.series[y1];
-      return `<tr onclick="openIndicator('${i.key}')">
-        <td>${esc(pu.name)} <span class="muted">· ${i.agency}</span></td>
-        <td class="trendcell" style="width:150px">${trendInner(i.series,pu.sfx)}</td>
-        <td style="text-align:right;white-space:nowrap;font-weight:600">${fmtU(v,pu.sfx)} <span class="muted" style="font-weight:400;font-size:11px">FY'${String(y1).slice(2)}</span></td>
-        <td style="text-align:right">${changeBadge(i)}</td></tr>`;}).join('')}</tbody></table></div>`;
+  return PINNED.map(k=>byk[k]).filter(Boolean).map(i=>scoreMove(i,true)).filter(Boolean);
 }
 function diversifyByDomain(arr,n,capPer){
   // arr is sorted by |pct| desc. Take the biggest movers but cap how many come
@@ -439,8 +439,13 @@ function notableRows(items,good,padTo){
 }
 function notablePanel(){
   const {imp,wor}=computeNotable();
-  if(!imp.length&&!wor.length) return '';
-  const I=diversifyByDomain(imp,8,2), W=diversifyByDomain(wor,8,2), pad=Math.max(I.length,W.length);
+  const pins=pinnedMoves(), pk=new Set(pins.map(o=>o.i.key));
+  const pimp=pins.filter(o=>o.better), pwor=pins.filter(o=>!o.better);
+  // pinned measures lead each column; fill the rest with the diversified top movers
+  const merge=(p,algo)=>[...p, ...diversifyByDomain(algo.filter(o=>!pk.has(o.i.key)), Math.max(0,8-p.length), 2)];
+  const I=merge(pimp,imp), W=merge(pwor,wor);
+  if(!I.length&&!W.length) return '';
+  const pad=Math.max(I.length,W.length);
   return `<div class="panel">
     <h2>Notable changes</h2>
     <div class="row2" style="margin-top:12px">
@@ -462,7 +467,6 @@ function renderOverview(){
       <div class="kpi"><div class="n">${m.n_agencies}</div><div class="l">agencies & entities</div></div>
       <div class="kpi"><div class="n">FY${m.fy_min}–${m.fy_max}</div><div class="l">years covered (PDF + machine-readable)</div></div>
     </div>
-    ${featuredPanel()}
     ${notablePanel()}
     <div class="panel">
       <h2>How much the city measures — and its churn</h2>
