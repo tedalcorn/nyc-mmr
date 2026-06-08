@@ -570,7 +570,7 @@ function renderAgency(code){
     <div class="detail-head"><div><h2>${esc(a.name)}</h2>
     <div class="sub">${code} · ${(a.n_active??inds.length)} active · ${inds.length} reported all-time · <span class="pill" style="background:${DOMAIN_COLOR[a.domain]}">${esc(a.domain)}</span></div>
     ${a.former?`<div class="ctx" style="margin-top:5px">Historical measures here include those once reported under: ${a.former.map(esc).join('; ')}.</div>`:''}</div></div>
-    ${Object.keys(bySvc).sort().map(svc=>`<div class="panel">
+    ${Object.keys(bySvc).sort((a,b)=>((a==='Other')-(b==='Other'))||a.localeCompare(b)).map(svc=>`<div class="panel">
       <h3 style="margin-bottom:8px">${esc(svc)}</h3>${indicatorTable(bySvc[svc],false)}</div>`).join('')}`;
 }
 
@@ -846,7 +846,7 @@ function renderDetail(key){
       </div>
       <div class="panel">
         <h3 style="margin-bottom:8px">About this measure</h3>
-        ${i.desc?`<div class="def">${esc(i.desc)}</div>`:'<p class="muted">No definition in the source data.</p>'}
+        ${i.desc?`<div class="def">${esc(i.desc)}${i.desc_src?` <span class="muted" style="font-size:11px">(${esc(i.desc_src)})</span>`:''}</div>`:'<p class="muted">No definition in the source data.</p>'}
         <div id="dirBox" style="margin:12px 0">${directionBox(i)}</div>
         <ul class="tight">
           ${i.source?`<li><strong>Source:</strong> ${esc(i.source)}</li>`:''}
