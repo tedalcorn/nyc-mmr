@@ -155,6 +155,20 @@ function indSort(a,b){
   const t=(TYPE_RANK[b.type]||0)-(TYPE_RANK[a.type]||0); if(t) return t;
   return sortName(a).localeCompare(sortName(b));
 }
+const TYPE_SHORT={'public outcome':'outcome','public participation':'participation','government process':'process','resource expenditure':'resource'};
+// compact big numbers for spark-chart end labels: 461K, 8.3M
+function cfmt(v){ if(v==null) return '—'; const a=Math.abs(v);
+  if(a>=1e6) return (v/1e6).toFixed(1)+'M';
+  if(a>=1e5) return Math.round(v/1e3)+'K';
+  return fmt(v); }
+const fmtUC=(v,sfx)=>v==null?'—':(sfx==='$'?'$'+cfmt(v):cfmt(v)+(sfx||''));
+// collapse a year list into compact ranges: [2003..2017,2020] -> "FY2003–FY2017, FY2020"
+function yrRange(years){
+  const ys=[...new Set((years||[]).map(Number))].sort((a,b)=>a-b); if(!ys.length) return '';
+  const out=[]; let s=ys[0],p=ys[0];
+  for(let k=1;k<=ys.length;k++){ if(ys[k]===p+1){p=ys[k];continue;} out.push(s===p?`FY${s}`:`FY${s}–FY${p}`); s=p=ys[k]; }
+  return out.join(', ');
+}
 // sort key that ignores leading punctuation (so "(Average…" / "-Foo" sort by letter)
 const sortName=i=>(i.name||'').replace(/^[^a-z0-9]+/i,'').toLowerCase();
 
@@ -283,8 +297,8 @@ function trendInner(series,sfx){
     svg+=`<circle cx="${xOf(y0).toFixed(1)}" cy="${yOf(series[y0]).toFixed(1)}" r="2.2" fill="#b9381f"/>`;
   }
   svg+=`<circle cx="${x1.toFixed(1)}" cy="${yy1.toFixed(1)}" r="2.2" fill="#b9381f"/>`;
-  const startLab=single?'':`<span class="tlab s" style="left:${(xOf(y0)-3).toFixed(1)}px;top:${yOf(series[y0]).toFixed(1)}px" title="FY${y0}">${fmtU(series[y0],csf)}</span>`;
-  const endLab=`<span class="tlab e" style="left:${(x1+5).toFixed(1)}px;top:${yy1.toFixed(1)}px" title="FY${y1}">${fmtU(series[y1],csf)}</span>`;
+  const startLab=single?'':`<span class="tlab s" style="left:${(xOf(y0)-3).toFixed(1)}px;top:${yOf(series[y0]).toFixed(1)}px" title="FY${y0}">${fmtUC(series[y0],csf)}</span>`;
+  const endLab=`<span class="tlab e" style="left:${(x1+5).toFixed(1)}px;top:${yy1.toFixed(1)}px" title="FY${y1}">${fmtUC(series[y1],csf)}</span>`;
   return `<div class="trend"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>${startLab}${endLab}</div>`;
 }
 
@@ -596,30 +610,34 @@ function renderIndicators(){
 function citeStr(a){ return a&&a.edition?` — FY${String(a.edition).replace(/^FY/,'')} MMR p.${a.page}`:''; }
 function alarmCell(i,nf){
   if(i.annotation) return `<span class="okchk" title="Reviewed &amp; OK — ${esc((i.annotation.note||''))}${esc(citeStr(i.annotation))}">✓</span>`;
-  if(nf) return `<span style="color:#c98a1b;font-size:14px" title="Missing data internally — no value for FY${i.flags.join(', FY')} (gap between reported years)">⚠</span>`;
+  if(i.inadequate) return `<span style="color:#c98a1b;font-size:14px" title="Inadequately labeled indicator">⚠</span>`;
+  if(nf) return `<span style="color:#c98a1b;font-size:14px" title="Discontinuous data — no values reported for ${yrRange(i.flags)}">⚠</span>`;
   return '';
 }
 function indicatorTable(list,showAgency){
   if(!list.length)return '<p class="muted" style="padding:14px">No indicators match.</p>';
   const SR={high:3,medium:2,low:1};
-  return `<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col style="width:90px"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
+  return `<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col style="width:108px"><col style="width:84px"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
     <th data-sort="text">Indicator</th><th${showAgency?' data-sort="text"':''}>${showAgency?'Agency':''}</th>
     <th data-sort="num" title="Click to sort by how long it has been tracked (longest first)"></th>
     <th data-sort="num">Change</th>
+    <th data-sort="num" title="What the measure tracks: a public outcome, public participation, a government process, or resource expenditure.">Type</th>
     <th data-sort="num" title="Inferred salience — how much the measure matters to the public. Click to sort high-first.">Salience</th>
-    <th data-sort="num" title="Retired = no longer reported">Status</th>
-    <th data-sort="num" title="⚠ = the series is missing data internally (a gap between years it otherwise reports). Click to sort flagged-first.">⚠</th></tr></thead><tbody>
+    <th data-sort="num" title="Active = reported in the latest MMR; otherwise the last fiscal year it appeared.">Status</th>
+    <th data-sort="num" title="⚠ = discontinuous or inadequately labeled; ✓ = a discontinuity reviewed and OK'd. Click to sort.">⚠</th></tr></thead><tbody>
     ${list.map(i=>{
-      const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name);
+      const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name), act=isActive(i);
       const nf=i.flags?i.flags.length:0;
       const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
-      return `<tr class="${isActive(i)?'':'retired'}" onclick="openIndicator('${i.key}')">
+      const tb=i.type?`<span class="placard" style="background:#dfe6ea;color:#3a5360" title="${esc(i.type)}${i.type_conf&&i.type_conf!=='high'?' ('+i.type_conf+' confidence)':''}">${TYPE_SHORT[i.type]||i.type}</span>`:'';
+      return `<tr class="${act?'':'retired'}" onclick="openIndicator('${i.key}')">
         <td data-sortval="${esc(sortName(i))}">${esc(pu.name)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
         <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
         <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
+        <td data-sortval="${TYPE_RANK[i.type]||0}">${tb}</td>
         <td data-sortval="${SR[i.salience]||0}">${sb}</td>
-        <td data-sortval="${i.retired?y1:''}">${i.retired?`<span class="placard" title="No longer reported">Retired '${String(y1).slice(2)}</span>`:''}</td>
-        <td data-sortval="${i.annotation?1:nf?-nf:''}" style="text-align:center">${alarmCell(i,nf)}</td></tr>`;
+        <td data-sortval="${act?9999:y1}">${act?`<span class="placard" style="background:#e2efe6;color:#2f6f4f">Active</span>`:`<span class="placard" title="Last reported FY${y1}">Retired '${String(y1).slice(2)}</span>`}</td>
+        <td data-sortval="${i.annotation?1:(i.inadequate||nf)?-(nf||1):''}" style="text-align:center">${alarmCell(i,nf)}</td></tr>`;
     }).join('')}</tbody></table>`;
 }
 
@@ -818,13 +836,13 @@ function renderDetail(key){
   el.innerHTML=`<span class="backlink" onclick="backFromDetail()">← Back</span>
     <div class="detail-head">
       <div><h2>${esc(pu.name)}</h2>
-        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${i.retired?` <span class="placard" title="Flagged 'retired' in the city's own data. Number = last fiscal year it was reported.">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`:''}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}</div>
+        <div class="sub"><span class="pill" style="background:${DOMAIN_COLOR[i.domain]}">${esc(i.domain)}</span> ${(i.agencies&&i.agencies.length>1)?i.agencies.map(c=>`<span class="tag" title="${esc(agencyName(c))}">${esc(c)}</span>`).join(' '):`<span class="tag">${esc(i.agency_name)}</span>`}${isActive(i)?` <span class="placard" style="background:#e2efe6;color:#2f6f4f" title="Reported in the latest MMR">Active</span>`:` <span class="placard" title="Last reported in this fiscal year (the in-progress year is excluded, so it may yet return)">Retired · last FY'${String(ys[ys.length-1]).slice(2)}</span>`}${i.pdf_link==='manual'?` <span class="placard" style="background:#fbe7d6;color:#9a6a2e" title="Pre-2016 linked by manual review">manually linked</span>`:i.pdf_link==='auto-data'?` <span class="placard" style="background:#dce8ef;color:#2e6f8e" title="Pre-2016 auto-linked by name+data match">auto-linked</span>`:''}</div>
         ${i.service?`<div class="ctx">${esc(i.service)}</div>`:''}</div>
     </div>
     <div class="row2">
       <div class="panel">
         <div class="chartwrap"><canvas id="detChart"></canvas></div>
-        ${i.annotation?`<div class="note" style="color:#2f6f57;border-top-color:#bfe0d0">✓ Reviewed: ${esc(i.annotation.note||'')}${i.annotation.edition?` <a href="${(META.pdf_urls||{})[String(i.annotation.edition).replace(/^FY/,'')]||'#'}" target="_blank" rel="noopener">FY${String(i.annotation.edition).replace(/^FY/,'')} MMR p.${i.annotation.page}</a>`:''}</div>`:i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Missing data: no value reported for FY${i.flags.join(', FY')} — a gap between years this measure otherwise reports. The line breaks across the gap rather than interpolating.</div>`:''}
+        ${i.annotation?`<div class="note" style="color:#2f6f57;border-top-color:#bfe0d0">✓ Reviewed: ${esc(i.annotation.note||'')}${i.annotation.edition?` <a href="${(META.pdf_urls||{})[String(i.annotation.edition).replace(/^FY/,'')]||'#'}" target="_blank" rel="noopener">FY${String(i.annotation.edition).replace(/^FY/,'')} MMR p.${i.annotation.page}</a>`:''}</div>`:i.inadequate?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Inadequately labeled indicator — its name and definition still need to be reconstructed from the source MMR.</div>`:i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Discontinuous data — no values reported for ${yrRange(i.flags)}.</div>`:''}
       </div>
       <div class="panel">
         <h3 style="margin-bottom:8px">About this measure</h3>
