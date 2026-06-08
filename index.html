@@ -75,6 +75,8 @@ table.indtable col.cTr{width:214px}
 table.indtable col.cCh{width:80px}
 table.indtable col.cSt{width:104px}
 table.indtable td:first-child{overflow:hidden;text-overflow:ellipsis}
+table.indtable tr.retired td{opacity:.45}          /* inactive measures: faded text, sparkline + labels */
+.okchk{color:#2f8f6b;font-weight:700;font-size:14px}
 .trend{position:relative;display:inline-block;width:200px;height:26px;vertical-align:middle}
 .trend svg{position:absolute;left:0;top:0}
 .tlab{position:absolute;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap;transform:translateY(-50%);cursor:help}
@@ -141,6 +143,18 @@ function parseUnit(name){
   return {name:name.slice(0,m.index).trim(), sfx};
 }
 const fmtU=(v,sfx)=>v==null?'—':(sfx==='$'?'$'+fmt(v):fmt(v)+(sfx||''));
+// "active" = reported in the latest complete MMR year
+const isActive=i=>i.series[String(META.fy_max)]!=null;
+const SAL_RANK={high:3,medium:2,low:1};
+const TYPE_RANK={'public outcome':4,'public participation':3,'government process':2,'resource expenditure':1};
+// default ordering everywhere: active first, then salience high->low, then type
+// (outcome > participation > process > resource), then name.
+function indSort(a,b){
+  const av=isActive(a)?1:0, bv=isActive(b)?1:0; if(av!==bv) return bv-av;
+  const s=(SAL_RANK[b.salience]||0)-(SAL_RANK[a.salience]||0); if(s) return s;
+  const t=(TYPE_RANK[b.type]||0)-(TYPE_RANK[a.type]||0); if(t) return t;
+  return sortName(a).localeCompare(sortName(b));
+}
 // sort key that ignores leading punctuation (so "(Average…" / "-Foo" sort by letter)
 const sortName=i=>(i.name||'').replace(/^[^a-z0-9]+/i,'').toLowerCase();
 
@@ -295,12 +309,17 @@ function salienceBadge(i){
   const v=i.valence&&i.valence!=='neutral'?' · up is '+(i.valence==='good'?'good':'bad'):'';
   return `<span class="placard" style="background:${bg};color:#5a463c" title="${esc(i.salience_why||'')}${v}">${i.salience} salience</span> `;
 }
+function typeBadge(i){
+  if(!i.type) return '';
+  const conf=i.type_conf&&i.type_conf!=='high'?` (${i.type_conf} confidence)`:'';
+  return `<span class="placard" style="background:#dfe6ea;color:#3a5360" title="${esc(i.type_why||'')}${conf}">${esc(i.type)}</span> `;
+}
 function directionBox(i){
   const d=effDir(i), ov=dirOverrides()[i.key], n=Object.keys(dirOverrides()).length;
   const lbl=d==='Down'?'↓ Lower is better':d==='Up'?'↑ Higher is better':'— no directional goal';
   const cls=d==='None'?'muted':'dirgood';
-  // salience (our interpretation) sits with the direction (also our interpretation)
-  return `${salienceBadge(i)}<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':dirInferred(i)?' <span class="muted" style="font-size:11px" title="The MMR sets no desired direction; inferred from what the measure tracks.">(inferred)</span>':''}
+  // salience + type (our interpretations) sit with the direction (also ours)
+  return `${salienceBadge(i)}${typeBadge(i)}<span class="${cls}" onclick="toggleDirEdit()" title="click to change" style="cursor:pointer;border-bottom:1px dotted #b3b0a8">${lbl}</span>${ov?' <span class="muted" style="font-size:11px">(edited)</span>':dirInferred(i)?' <span class="muted" style="font-size:11px" title="The MMR sets no desired direction; inferred from what the measure tracks.">(inferred)</span>':''}
     <div id="dirBtns" data-key="${i.key}" style="display:none;margin-top:6px">
       <button class="lbtn" data-dir="Up">↑ higher</button><button class="lbtn" data-dir="Down">↓ lower</button><button class="lbtn" data-dir="None">– neutral</button>${ov?` <button class="lbtn" data-dir="clear">reset</button>`:''}${n?` <button class="lbtn" onclick="dlDirs()" title="export all direction edits">⬇ ${n}</button>`:''}
     </div>`;
@@ -529,9 +548,10 @@ function renderAgency(code){
   // group by service area
   const bySvc={};
   inds.forEach(i=>{(bySvc[i.service||'Other']=bySvc[i.service||'Other']||[]).push(i);});
+  Object.values(bySvc).forEach(g=>g.sort(indSort));   // active, then salience, then type
   el.innerHTML=`<span class="backlink" onclick="go({agency:null})">← All agencies</span>
     <div class="detail-head"><div><h2>${esc(a.name)}</h2>
-    <div class="sub">${code} · ${inds.length} citywide indicators · <span class="pill" style="background:${DOMAIN_COLOR[a.domain]}">${esc(a.domain)}</span></div>
+    <div class="sub">${code} · ${(a.n_active??inds.length)} active · ${inds.length} reported all-time · <span class="pill" style="background:${DOMAIN_COLOR[a.domain]}">${esc(a.domain)}</span></div>
     ${a.former?`<div class="ctx" style="margin-top:5px">Historical measures here include those once reported under: ${a.former.map(esc).join('; ')}.</div>`:''}</div></div>
     ${Object.keys(bySvc).sort().map(svc=>`<div class="panel">
       <h3 style="margin-bottom:8px">${esc(svc)}</h3>${indicatorTable(bySvc[svc],false)}</div>`).join('')}`;
@@ -562,7 +582,7 @@ function renderIndicators(){
     if(fd.value)r=r.filter(i=>i.domain===fd.value);
     if(fa.value)r=r.filter(i=>i.agency===fa.value);
     if(fs.value)r=r.filter(i=>i.salience===fs.value);
-    r=r.slice().sort((a,b)=>sortName(a).localeCompare(sortName(b)));
+    r=r.slice().sort(indSort);
     $('#indTable').innerHTML=indicatorTable(r,true);
     attachSortable();
     writeHash(); restorePendingScroll();
@@ -570,6 +590,12 @@ function renderIndicators(){
   q.oninput=upd; fd.onchange=upd; fa.onchange=upd; fs.onchange=upd; window._indUpd=upd; upd();
 }
 
+function citeStr(a){ return a&&a.edition?` — FY${String(a.edition).replace(/^FY/,'')} MMR p.${a.page}`:''; }
+function alarmCell(i,nf){
+  if(i.annotation) return `<span class="okchk" title="Reviewed &amp; OK — ${esc((i.annotation.note||''))}${esc(citeStr(i.annotation))}">✓</span>`;
+  if(nf) return `<span style="color:#c98a1b;font-size:14px" title="Missing data internally — no value for FY${i.flags.join(', FY')} (gap between reported years)">⚠</span>`;
+  return '';
+}
 function indicatorTable(list,showAgency){
   if(!list.length)return '<p class="muted" style="padding:14px">No indicators match.</p>';
   const SR={high:3,medium:2,low:1};
@@ -584,13 +610,13 @@ function indicatorTable(list,showAgency){
       const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name);
       const nf=i.flags?i.flags.length:0;
       const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
-      return `<tr onclick="openIndicator('${i.key}')">
+      return `<tr class="${isActive(i)?'':'retired'}" onclick="openIndicator('${i.key}')">
         <td data-sortval="${esc(sortName(i))}">${esc(pu.name)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
         <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
         <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
         <td data-sortval="${SR[i.salience]||0}">${sb}</td>
         <td data-sortval="${i.retired?y1:''}">${i.retired?`<span class="placard" title="No longer reported">Retired '${String(y1).slice(2)}</span>`:''}</td>
-        <td data-sortval="${nf?-nf:''}" style="text-align:center">${nf?`<span style="color:#c98a1b;font-size:14px" title="Missing data internally — no value for FY${i.flags.join(', FY')} (gap between reported years)">⚠</span>`:''}</td></tr>`;
+        <td data-sortval="${i.annotation?1:nf?-nf:''}" style="text-align:center">${alarmCell(i,nf)}</td></tr>`;
     }).join('')}</tbody></table>`;
 }
 
@@ -795,7 +821,7 @@ function renderDetail(key){
     <div class="row2">
       <div class="panel">
         <div class="chartwrap"><canvas id="detChart"></canvas></div>
-        ${i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Missing data: no value reported for FY${i.flags.join(', FY')} — a gap between years this measure otherwise reports. The line breaks across the gap rather than interpolating.</div>`:''}
+        ${i.annotation?`<div class="note" style="color:#2f6f57;border-top-color:#bfe0d0">✓ Reviewed: ${esc(i.annotation.note||'')}${i.annotation.edition?` <a href="${(META.pdf_urls||{})[String(i.annotation.edition).replace(/^FY/,'')]||'#'}" target="_blank" rel="noopener">FY${String(i.annotation.edition).replace(/^FY/,'')} MMR p.${i.annotation.page}</a>`:''}</div>`:i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Missing data: no value reported for FY${i.flags.join(', FY')} — a gap between years this measure otherwise reports. The line breaks across the gap rather than interpolating.</div>`:''}
       </div>
       <div class="panel">
         <h3 style="margin-bottom:8px">About this measure</h3>
