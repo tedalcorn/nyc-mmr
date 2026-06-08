@@ -857,9 +857,6 @@ function renderDetail(key){
         <ul class="tight">${srcList}</ul>${renameNote}
         ${(i.agencies&&i.agencies.length>1&&i.agency_years)?`<div class="note" style="margin-top:10px">Reported in more than one agency's chapter: ${i.agencies.map(c=>`<b>${esc(c)}</b> (${yrRanges(i.agency_years[c]||[])})`).join('; ')}. Where multiple agencies reported it in the same year, the figure was identical.</div>`:''}
         ${(i.merged_names&&i.merged_names.length)?`<div class="note" style="margin-top:8px">This series combines records the city also published under: ${i.merged_names.map(n=>`“${esc(n)}”`).join('; ')} — identical values where they overlap.</div>`:''}
-        ${(i.noteworthy&&i.noteworthy.length)?`<h3 style="margin:14px 0 4px">Noteworthy changes (from the MMR)</h3>
-          <ul class="tight">${i.noteworthy.map(n=>{const ed=String(n.edition).replace(/^FY/,''),url=(META.pdf_urls||{})[ed];
-            return `<li><span class="muted">${url?`<a href="${url}" target="_blank" rel="noopener">FY${ed} p.${n.page}</a>`:`FY${ed} p.${n.page}`}${n.cats&&n.cats.length?` · ${esc(n.cats.join(', '))}`:''}:</span> ${esc(n.text)}</li>`;}).join('')}</ul>`:''}
       </div>
     </div>
     ${hasGeo?`<div class="panel"><h3 style="margin-bottom:4px">By neighborhood</h3>
