@@ -384,35 +384,37 @@ function attachSortable(){
 }
 
 /* ---------- OVERVIEW ---------- */
-// the biggest sustained moves in measures that have a "good direction", framed
-// as improvement or deterioration (median of first 3 vs last 3 years of a recent
-// window). Skips flagged endpoints, tiny bases, short/retired series.
+// measures to keep OUT of Notable changes (e.g. too noisy / no clear trend)
+const NOTABLE_EXCLUDE=[/school safety.*forcible rape/i];
+// the biggest sustained moves in measures with a "good direction": median of the
+// first 3 vs the last 3 years over the WHOLE tracked span (so a long decline like
+// traffic deaths counts over its full history). For dollar measures the change is
+// computed in INFLATION-ADJUSTED dollars. Skips flagged endpoints and tiny bases.
 function scoreMove(i,relaxed){
-  // score one measure's recent move (median of first 3 vs last 3 years of the last
-  // ~10). relaxed=true skips the spotlight gates (salience/recency/threshold) — used
-  // for PINNED measures we always want shown, however they happen to have moved.
   const maxY=+META.fy_max;
   const med=a=>{a=[...a].sort((x,y)=>x-y);return a.length?a[Math.floor((a.length-1)/2)]:null;};
   const ed=effDir(i); if(ed!=='Up'&&ed!=='Down') return null;
   if(/cumulative|to date|to-date/i.test(i.name)) return null;
+  if(NOTABLE_EXCLUDE.some(rx=>rx.test(i.name))) return null;
   if(!relaxed){
     if(i.salience!=='high') return null;
     if(i.flags&&i.flags.length) return null;
   }
-  const ys=yearsOf(i.series); if(ys.length<6) return null;
-  if(!relaxed && ys[0]>2014) return null;
-  const y1=ys[ys.length-1]; if(!relaxed && maxY-y1>1) return null;
+  // use the inflation-adjusted series for dollar measures
+  const S=(i.is_dollar&&i.real)?i.real:i.series, real=(i.is_dollar&&i.real);
+  const ys=yearsOf(S); if(ys.length<6) return null;
+  if(!relaxed && ys[0]>2014) return null;            // skip brand-new measures
+  const y1=ys[ys.length-1]; if(!relaxed && maxY-y1>1) return null;  // current-ish
   const fset=new Set(i.flags||[]);
-  const win=ys.filter(y=>y>=y1-10); if(win.length<6) return null;
-  const early=win.slice(0,3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
-  const late=win.slice(-3).filter(y=>!fset.has(y)).map(y=>i.series[y]);
+  const early=ys.filter(y=>!fset.has(y)).slice(0,3).map(y=>S[y]);   // first 3 of the FULL span
+  const late=ys.filter(y=>!fset.has(y)).slice(-3).map(y=>S[y]);     // last 3 of the FULL span
   if(early.length<2||late.length<2) return null;
   const v0=med(early), v1=med(late);
   if(v0==null||v1==null||Math.abs(v0)<3) return null;
   const pct=(v1-v0)/Math.abs(v0);
   if(!relaxed && (Math.abs(pct)<0.20||Math.abs(pct)>5)) return null;
   const better=ed==='Up'?pct>0:pct<0;
-  return {i,y0:win[0],y1,v0,v1,pct,better};
+  return {i,y0:ys[0],y1,v0,v1,pct,better,real};
 }
 function computeNotable(){
   const out=[];
@@ -449,9 +451,10 @@ function diversifyByDomain(arr,n,capPer){
 function notableRows(items,good,padTo){
   let h=items.map(o=>{const pu=parseUnit(o.i.name);
     const arrow=o.pct>0?'▲':'▼', col=good?'#3c7d7a':'#b9381f';
+    const rtag=o.real?` <span class="muted" style="font-size:10px" title="change in inflation-adjusted dollars">(real $)</span>`:'';
     return `<tr onclick="openIndicator('${o.i.key}')">
       <td>${esc(pu.name)} <span class="muted">· ${o.i.agency}</span></td>
-      <td style="text-align:right;white-space:nowrap;color:${col};font-weight:600">${arrow} ${Math.abs(Math.round(o.pct*100))}%</td>
+      <td style="text-align:right;white-space:nowrap;color:${col};font-weight:600" title="${o.real?'inflation-adjusted ':''}FY${o.y0}→FY${o.y1}">${arrow} ${Math.abs(Math.round(o.pct*100))}%${rtag}</td>
       <td class="muted" style="text-align:right;white-space:nowrap">FY${String(o.y0).slice(2)}→${String(o.y1).slice(2)}</td></tr>`;}).join('');
   for(let k=items.length;k<padTo;k++) h+='<tr aria-hidden="true"><td>&nbsp;</td><td></td><td></td></tr>';  // pad so both columns are equal height
   return h;
