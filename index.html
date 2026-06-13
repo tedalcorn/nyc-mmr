@@ -606,7 +606,7 @@ function renderAgencies(){
 }
 function renderAgency(code){
   const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
-  const inds=INDS.filter(i=>i.agency===code);
+  const inds=INDS.filter(i=>i.agency===code||(i.agencies&&i.agencies.includes(code)));
   // group by service area
   const bySvc={};
   inds.forEach(i=>{(bySvc[i.service||'Other']=bySvc[i.service||'Other']||[]).push(i);});
@@ -644,7 +644,7 @@ function renderIndicators(){
     // apply the non-text filters first (these bound any group we pull in)
     let base=INDS.slice();
     if(fd.value)base=base.filter(i=>i.domain===fd.value);
-    if(fa.value)base=base.filter(i=>i.agency===fa.value);
+    if(fa.value)base=base.filter(i=>i.agency===fa.value||(i.agencies&&i.agencies.includes(fa.value)));
     if(fs.value)base=base.filter(i=>i.salience===fs.value);
     // a term hit on any group member pulls the WHOLE group (within the filters)
     const hitGroups=new Set(base.filter(byText).map(i=>i.group));
