@@ -377,12 +377,24 @@ function applySort(table, th, asc){
   [...table.querySelectorAll('thead th')].forEach(t=>{t.dataset.dir='';const a=t.querySelector('.arr');if(a)a.remove();});
   th.dataset.dir=asc?'asc':'desc';
   const idx=th.cellIndex, tb=table.tBodies[0], rows=[...tb.rows], num=th.dataset.sort==='num';
-  rows.sort((ra,rb)=>{ let va=ra.cells[idx].dataset.sortval, vb=rb.cells[idx].dataset.sortval;
-    if(num){ const ea=va===''||va==null, eb=vb===''||vb==null;   // blanks always last
+  // group rows into BLOCKS by data-group (subcategories stay with their parent)
+  const blocks=[], pos={};
+  rows.forEach(r=>{ const g=r.dataset.group||('__'+Math.random());
+    if(!(g in pos)){ pos[g]=blocks.length; blocks.push([]); } blocks[pos[g]].push(r); });
+  // each block sorts by its TOP indicator: the gtop/grouphdr row if present,
+  // else the first row with a value in this column
+  const keyOf=blk=>{ const lead=blk.find(r=>r.classList.contains('gtop')||r.classList.contains('grouphdr'))||blk[0];
+    let v=(lead.cells[idx]&&lead.cells[idx].dataset.sortval);
+    if((v===''||v==null) && !lead.classList.contains('gtop')){
+      const fr=blk.find(r=>r.cells[idx]&&r.cells[idx].dataset.sortval!==''&&r.cells[idx].dataset.sortval!=null);
+      if(fr) v=fr.cells[idx].dataset.sortval; }
+    return v; };
+  blocks.sort((ba,bb)=>{ let va=keyOf(ba), vb=keyOf(bb);
+    if(num){ const ea=va===''||va==null, eb=vb===''||vb==null;
       if(ea&&eb)return 0; if(ea)return 1; if(eb)return -1;
       va=parseFloat(va);vb=parseFloat(vb);return asc?va-vb:vb-va;}
     return asc?(''+va).localeCompare(''+vb):(''+vb).localeCompare(''+va);});
-  rows.forEach(r=>tb.appendChild(r));
+  blocks.forEach(blk=>blk.forEach(r=>tb.appendChild(r)));
   th.insertAdjacentHTML('beforeend',`<span class="arr"> ${asc?'▲':'▼'}</span>`);
 }
 function makeSortable(table){
@@ -640,14 +652,14 @@ function indicatorTable(list,showAgency,term){
     <th data-sort="num" title="⚠ = discontinuous or inadequately labeled; ✓ = a discontinuity reviewed and OK'd. Click to sort.">⚠</th></tr></thead><tbody>`;
   const hl=t=>{ if(!term) return esc(t); const i=t.toLowerCase().indexOf(term.toLowerCase());
     return i<0?esc(t):esc(t.slice(0,i))+'<span class="ghit">'+esc(t.slice(i,i+term.length))+'</span>'+esc(t.slice(i+term.length)); };
-  const rowHTML=(i,cls,indent)=>{
+  const rowHTML=(i,cls,indent,g)=>{
     const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name), act=isActive(i);
     const nf=i.flags?i.flags.length:0;
     const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
     const tb=i.type?`<span class="placard" style="background:#dfe6ea;color:#3a5360" title="${esc(i.type)}${i.type_conf&&i.type_conf!=='high'?' ('+i.type_conf+' confidence)':''}">${TYPE_SHORT[i.type]||i.type}</span>`:'';
     // within a group, show only the part of the name AFTER the parent stem
     const shown = indent ? (pu.name.split(' - ').slice(indent).join(' - ')||pu.name) : pu.name;
-    return `<tr class="${act?'':'retired'} ${cls||''}" onclick="openIndicator('${i.key}')">
+    return `<tr class="${act?'':'retired'} ${cls||''}" data-group="${esc(g||i.key)}" onclick="openIndicator('${i.key}')">
       <td class="${indent?('gind'+Math.min(indent,3)):''}" data-sortval="${esc(sortName(i))}">${hl(shown)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
       <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
       <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
@@ -662,18 +674,18 @@ function indicatorTable(list,showAgency,term){
   let body='';
   order.forEach(g=>{
     const mem=byg.get(g);
-    if(mem.length===1){ body+=rowHTML(mem[0],'',0); return; }
+    if(mem.length===1){ body+=rowHTML(mem[0],'',0,g); return; }
     // group: parent (depth 0) first if present, then children by depth then name
     mem.sort((a,b)=>(a.depth-b.depth)||a.name.localeCompare(b.name));
     const baseDepth=mem[0].depth;
     const parent=mem.find(m=>m.depth===0);
     if(!parent){ // no standalone parent: header label = the shared stem
       const stem=(g.split('|')[1]||'');
-      body+=`<tr class="grouphdr"><td colspan="8">${hl(stem)}</td></tr>`;
+      body+=`<tr class="grouphdr" data-group="${esc(g)}"><td colspan="8" data-sortval="${esc(stem.toLowerCase())}">${hl(stem)}</td></tr>`;
     }
     mem.forEach((m,idx)=>{
       const ind = m.depth - baseDepth;
-      body+= (parent&&idx===0) ? rowHTML(m,'gtop',0) : rowHTML(m,'subcat', Math.max(ind, parent?1:1));
+      body+= (parent&&idx===0) ? rowHTML(m,'gtop',0,g) : rowHTML(m,'subcat', Math.max(ind, parent?1:1), g);
     });
   });
   return TH+body+`</tbody></table>`;
