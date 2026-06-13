@@ -700,10 +700,11 @@ function indicatorTable(list,showAgency,term){
   order.forEach(g=>{
     const mem=byg.get(g);
     if(mem.length===1){ body+=rowHTML(mem[0],'',0,g); return; }
-    // group: parent first (shallowest depth), then by the precomputed
-    // pattern order (gord: spectrum/process/ordinal/biggest-first, with
-    // "Other" & retired sunk), name as a final tiebreak
-    mem.sort((a,b)=>(a.depth-b.depth)||((a.gord??0)-(b.gord??0))||a.name.localeCompare(b.name));
+    // gord is a depth-FIRST order computed at build time (each child sits
+    // under its own parent; sibling sets ordered by pattern — spectrum /
+    // process / ordinal / biggest-first, with "Other" & retired sunk). Sort
+    // by it alone; depth drives only the indentation below.
+    mem.sort((a,b)=>((a.gord??0)-(b.gord??0))||a.name.localeCompare(b.name));
     const baseDepth=mem[0].depth;
     const parent=mem.find(m=>m.depth===0);
     // if the whole family is retired (and the top row carries no live data of
