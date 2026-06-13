@@ -47,7 +47,9 @@ h2{font-size:19px;margin-bottom:4px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
 .chartwrap{position:relative;height:340px}
 .note{color:var(--muted);font-size:12px;margin-top:10px;font-style:italic;border-top:1px solid var(--line);padding-top:8px}
-.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.controls{display:flex;gap:10px;flex-wrap:nowrap;align-items:center;margin-bottom:16px}
+.controls input#q{flex:1 1 140px;min-width:90px}
+.controls select{flex:0 1 auto;max-width:210px}
 .ctl{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
 #ngHl{max-height:118px;overflow-y:auto;align-items:flex-start}
 .chip{font:inherit;font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:11px;background:#fff;color:#555;cursor:pointer;white-space:nowrap}
@@ -94,7 +96,7 @@ table.indtable tr.gtop td{border-top:2px solid #e2e2e2}
   table.indtable td:not(:first-child):not(.trendcell){display:inline-block;margin:2px 10px 0 0;font-size:12px}
   table.indtable td:empty{display:none}
   table.indtable tr.grouphdr td{background:transparent;font-weight:400;padding:7px 4px}
-  .controls{gap:7px} .controls>*{flex:1 1 100%}
+  .controls{gap:7px;flex-wrap:wrap} .controls>*{flex:1 1 100%} .controls select{max-width:none}
 }
 .okchk{color:#2f8f6b;font-weight:700;font-size:14px}
 .trend{position:relative;display:inline-block;width:200px;height:26px;vertical-align:middle}
