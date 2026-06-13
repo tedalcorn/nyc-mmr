@@ -692,6 +692,9 @@ function indicatorTable(list,showAgency,term){
     if(indent){ const stem=(g||'').split('|')[1]||''; const sw=stem.split(' '), lw=shown.split(' ');
       let c=0; while(c<sw.length&&c<lw.length&&sw[c].toLowerCase()===lw[c].toLowerCase()) c++;
       if(c>=4){ let r=lw.slice(c).join(' ').replace(/^[-–—\s]+/,''); if(r.split(' ').length>=2) shown=r.charAt(0).toUpperCase()+r.slice(1); } }
+    // capitalize a leaf that starts lowercase (child split off a longer name)
+    // but leave camelCase terms of art alone ("eConsults")
+    if(/^[a-z]/.test(shown) && !/^[a-z][A-Z]/.test(shown)) shown=shown.charAt(0).toUpperCase()+shown.slice(1);
     return `<tr class="${act?'':'retired'} ${cls||''}" data-group="${esc(g||i.key)}" onclick="openIndicator('${i.key}')">
       <td class="${indent?('gind'+Math.min(indent,3)):''}" data-sortval="${esc(sortName(i))}">${hl(shown)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
       <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
@@ -723,8 +726,13 @@ function indicatorTable(list,showAgency,term){
       body+=`<tr class="grouphdr ${allRet?'retired':''}" data-group="${esc(g)}"><td colspan="8" data-sortval="${esc(stem.toLowerCase())}">${hl(stem)}</td></tr>`;
     }
     mem.forEach((m,idx)=>{
-      const ind = m.depth - baseDepth;
-      body+= (parent&&idx===0) ? rowHTML(m,'gtop',0,g) : rowHTML(m,'subcat', Math.max(ind, parent?1:1), g);
+      // indent by ABSOLUTE depth (segments past the group stem), not relative
+      // to the min member depth — otherwise parent-less groups (e.g. School
+      // safety, where members start at depth 1) keep one ancestor segment in
+      // the label ("Major felony crime - Grand larceny" instead of "Grand
+      // larceny") and under-indent the deepest rows.
+      const ind = m.depth;
+      body+= (parent&&idx===0) ? rowHTML(m,'gtop',0,g) : rowHTML(m,'subcat', Math.max(ind, 1), g);
     });
   });
   return TH+body+`</tbody></table>`;
