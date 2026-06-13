@@ -688,11 +688,9 @@ function indicatorTable(list,showAgency,term){
   let body='';
   order.forEach(g=>{
     const mem=byg.get(g);
+    if(mem.length===1){ body+=rowHTML(mem[0],'',0,g); return; }
+    // group: parent (depth 0) first if present, then children by depth then name
     mem.sort((a,b)=>(a.depth-b.depth)||a.name.localeCompare(b.name));
-    const baseD0=mem[0].depth;
-    const subCount=mem.filter(m=>m.depth>baseD0).length;
-    // don't nest a lone subcategory (or a single row): show plainly, full names
-    if(mem.length===1 || subCount<2){ mem.forEach(m=>body+=rowHTML(m,'',0,g)); return; }
     const baseDepth=mem[0].depth;
     const parent=mem.find(m=>m.depth===0);
     if(!parent){ // no standalone parent: header label = the shared stem
