@@ -82,6 +82,20 @@ table.indtable tr.grouphdr td{background:#fafafa;font-weight:600;border-top:2px 
 table.indtable tr.gtop td{border-top:2px solid #e2e2e2}
 .ghit{color:#c0392b}                                /* searched term inside a group */
 .gind1{padding-left:20px} .gind2{padding-left:38px} .gind3{padding-left:54px}
+/* ---- mobile: the 8-column table can't hold the name; stack each row as a card ---- */
+@media(max-width:680px){
+  table.indtable, table.indtable tbody, table.indtable tr, table.indtable td{display:block;width:auto!important}
+  table.indtable thead, table.indtable colgroup{display:none}
+  table.indtable tr{border-bottom:1px solid #e2e2e2;padding:9px 2px 10px}
+  table.indtable td{border:none!important;padding:1px 2px;white-space:normal;overflow:visible;text-overflow:clip;text-align:left!important}
+  table.indtable td:first-child{font-weight:600;font-size:14px;line-height:1.3}      /* indicator name: full, wrapping */
+  table.indtable tr.subcat td:first-child{font-weight:400}
+  table.indtable td.trendcell{margin:5px 0 3px}
+  table.indtable td:not(:first-child):not(.trendcell){display:inline-block;margin:2px 10px 0 0;font-size:12px}
+  table.indtable td:empty{display:none}
+  table.indtable tr.grouphdr td{background:#fafafa;font-weight:700;padding:7px 4px}
+  .controls{gap:7px} .controls>*{flex:1 1 100%}
+}
 .okchk{color:#2f8f6b;font-weight:700;font-size:14px}
 .trend{position:relative;display:inline-block;width:200px;height:26px;vertical-align:middle}
 .trend svg{position:absolute;left:0;top:0}
