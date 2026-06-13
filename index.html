@@ -689,8 +689,10 @@ function indicatorTable(list,showAgency,term){
   order.forEach(g=>{
     const mem=byg.get(g);
     if(mem.length===1){ body+=rowHTML(mem[0],'',0,g); return; }
-    // group: parent (depth 0) first if present, then children by depth then name
-    mem.sort((a,b)=>(a.depth-b.depth)||a.name.localeCompare(b.name));
+    // group: parent first (shallowest depth), then by the precomputed
+    // pattern order (gord: spectrum/process/ordinal/biggest-first, with
+    // "Other" & retired sunk), name as a final tiebreak
+    mem.sort((a,b)=>(a.depth-b.depth)||((a.gord??0)-(b.gord??0))||a.name.localeCompare(b.name));
     const baseDepth=mem[0].depth;
     const parent=mem.find(m=>m.depth===0);
     if(!parent){ // no standalone parent: header label = the shared stem
