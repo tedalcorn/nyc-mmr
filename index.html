@@ -76,12 +76,12 @@ table.indtable col.cCh{width:80px}
 table.indtable col.cSt{width:104px}
 table.indtable td:first-child{overflow:hidden;text-overflow:ellipsis}
 table.indtable tr.retired td{opacity:.45}          /* inactive measures: faded text, sparkline + labels */
-table.indtable tr.subcat td{border-top:1px solid #f4f4f4}   /* group members read as one block */
+table.indtable tr.subcat td{border-top:none}   /* no line between an uber-category and its subordinates */
 table.indtable tr.subcat td:first-child{font-style:italic}
-table.indtable tr.grouphdr td{background:#fafafa;font-weight:600;border-top:2px solid #e2e2e2}
+table.indtable tr.grouphdr td{background:transparent;font-weight:400;border-top:2px solid #e2e2e2}
 table.indtable tr.gtop td{border-top:2px solid #e2e2e2}
 .ghit{color:#c0392b}                                /* searched term inside a group */
-.gind1{padding-left:20px} .gind2{padding-left:38px} .gind3{padding-left:54px}
+.gind1{padding-left:40px} .gind2{padding-left:72px} .gind3{padding-left:104px}
 /* ---- mobile: the 8-column table can't hold the name; stack each row as a card ---- */
 @media(max-width:680px){
   table.indtable, table.indtable tbody, table.indtable tr, table.indtable td{display:block;width:auto!important}
@@ -93,7 +93,7 @@ table.indtable tr.gtop td{border-top:2px solid #e2e2e2}
   table.indtable td.trendcell{margin:5px 0 3px}
   table.indtable td:not(:first-child):not(.trendcell){display:inline-block;margin:2px 10px 0 0;font-size:12px}
   table.indtable td:empty{display:none}
-  table.indtable tr.grouphdr td{background:#fafafa;font-weight:700;padding:7px 4px}
+  table.indtable tr.grouphdr td{background:transparent;font-weight:400;padding:7px 4px}
   .controls{gap:7px} .controls>*{flex:1 1 100%}
 }
 .okchk{color:#2f8f6b;font-weight:700;font-size:14px}
