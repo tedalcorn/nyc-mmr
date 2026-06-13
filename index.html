@@ -683,7 +683,13 @@ function indicatorTable(list,showAgency,term){
     const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
     const tb=i.type?`<span class="placard" style="background:#dfe6ea;color:#3a5360" title="${esc(i.type)}${i.type_conf&&i.type_conf!=='high'?' ('+i.type_conf+' confidence)':''}">${TYPE_SHORT[i.type]||i.type}</span>`:'';
     // within a group, show only the part of the name AFTER the parent stem
-    const shown = indent ? (pu.name.split(' - ').slice(indent).join(' - ')||pu.name) : pu.name;
+    let shown = indent ? (pu.name.split(' - ').slice(indent).join(' - ')||pu.name) : pu.name;
+    // strip a long shared leading word-run with the group stem so a child
+    // doesn't redundantly repeat its parent ("Written Policy...accepted -
+    // Written Policy...implemented" shows just "...implemented")
+    if(indent){ const stem=(g||'').split('|')[1]||''; const sw=stem.split(' '), lw=shown.split(' ');
+      let c=0; while(c<sw.length&&c<lw.length&&sw[c].toLowerCase()===lw[c].toLowerCase()) c++;
+      if(c>=4){ let r=lw.slice(c).join(' ').replace(/^[-–—\s]+/,''); if(r.split(' ').length>=2) shown=r.charAt(0).toUpperCase()+r.slice(1); } }
     return `<tr class="${act?'':'retired'} ${cls||''}" data-group="${esc(g||i.key)}" onclick="openIndicator('${i.key}')">
       <td class="${indent?('gind'+Math.min(indent,3)):''}" data-sortval="${esc(sortName(i))}">${hl(shown)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
       <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
