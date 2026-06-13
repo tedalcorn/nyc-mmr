@@ -182,6 +182,16 @@ function cfmt(v){ if(v==null) return '—'; const a=Math.abs(v);
   if(a>=1e5) return Math.round(v/1e3)+'K';
   return fmt(v); }
 const fmtUC=(v,sfx)=>v==null?'—':(sfx==='$'?'$'+cfmt(v):cfmt(v)+(sfx||''));
+// the two labels on ONE sparkline must share a scale: pick K/M from the
+// larger of the two so we never show "111K" beside "98,000" or "980K" beside
+// "1.1M". ≥100M drops the decimal (150M, not 150.0M).
+function spScale(vals){ const a=Math.max(0,...vals.filter(v=>v!=null).map(Math.abs));
+  return a>=1e6?'M':(a>=1e5?'K':''); }
+function cfmtS(v,sc){ if(v==null) return '—';
+  if(sc==='M'){ const m=v/1e6; return (Math.abs(m)>=100?Math.round(m):m.toFixed(1))+'M'; }
+  if(sc==='K') return Math.round(v/1e3)+'K';
+  return fmt(v); }
+const fmtUCs=(v,sfx,sc)=>v==null?'—':(sfx==='$'?'$'+cfmtS(v,sc):cfmtS(v,sc)+(sfx||''));
 // collapse a year list into compact ranges: [2003..2017,2020] -> "FY2003–FY2017, FY2020"
 function yrRange(years){
   const ys=[...new Set((years||[]).map(Number))].sort((a,b)=>a-b); if(!ys.length) return '';
@@ -317,8 +327,9 @@ function trendInner(series,sfx){
     svg+=`<circle cx="${xOf(y0).toFixed(1)}" cy="${yOf(series[y0]).toFixed(1)}" r="2.2" fill="#b9381f"/>`;
   }
   svg+=`<circle cx="${x1.toFixed(1)}" cy="${yy1.toFixed(1)}" r="2.2" fill="#b9381f"/>`;
-  const startLab=single?'':`<span class="tlab s" style="left:${(xOf(y0)-3).toFixed(1)}px;top:${yOf(series[y0]).toFixed(1)}px" title="FY${y0}">${fmtUC(series[y0],csf)}</span>`;
-  const endLab=`<span class="tlab e" style="left:${(x1+5).toFixed(1)}px;top:${yy1.toFixed(1)}px" title="FY${y1}">${fmtUC(series[y1],csf)}</span>`;
+  const _sc=spScale([series[y0],series[y1]]);
+  const startLab=single?'':`<span class="tlab s" style="left:${(xOf(y0)-3).toFixed(1)}px;top:${yOf(series[y0]).toFixed(1)}px" title="FY${y0}">${fmtUCs(series[y0],csf,_sc)}</span>`;
+  const endLab=`<span class="tlab e" style="left:${(x1+5).toFixed(1)}px;top:${yy1.toFixed(1)}px" title="FY${y1}">${fmtUCs(series[y1],csf,_sc)}</span>`;
   return `<div class="trend"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>${startLab}${endLab}</div>`;
 }
 
@@ -695,9 +706,12 @@ function indicatorTable(list,showAgency,term){
     mem.sort((a,b)=>(a.depth-b.depth)||((a.gord??0)-(b.gord??0))||a.name.localeCompare(b.name));
     const baseDepth=mem[0].depth;
     const parent=mem.find(m=>m.depth===0);
+    // if the whole family is retired (and the top row carries no live data of
+    // its own), gray the ubercategory header too — not just the children.
+    const allRet=mem.every(m=>!isActive(m));
     if(!parent){ // no standalone parent: header label = the shared stem
       const stem=(g.split('|')[1]||'');
-      body+=`<tr class="grouphdr" data-group="${esc(g)}"><td colspan="8" data-sortval="${esc(stem.toLowerCase())}">${hl(stem)}</td></tr>`;
+      body+=`<tr class="grouphdr ${allRet?'retired':''}" data-group="${esc(g)}"><td colspan="8" data-sortval="${esc(stem.toLowerCase())}">${hl(stem)}</td></tr>`;
     }
     mem.forEach((m,idx)=>{
       const ind = m.depth - baseDepth;
