@@ -76,6 +76,12 @@ table.indtable col.cCh{width:80px}
 table.indtable col.cSt{width:104px}
 table.indtable td:first-child{overflow:hidden;text-overflow:ellipsis}
 table.indtable tr.retired td{opacity:.45}          /* inactive measures: faded text, sparkline + labels */
+table.indtable tr.subcat td{border-top:1px solid #f4f4f4}   /* group members read as one block */
+table.indtable tr.subcat td:first-child{font-style:italic}
+table.indtable tr.grouphdr td{background:#fafafa;font-weight:600;border-top:2px solid #e2e2e2}
+table.indtable tr.gtop td{border-top:2px solid #e2e2e2}
+.ghit{color:#c0392b}                                /* searched term inside a group */
+.gind1{padding-left:20px} .gind2{padding-left:38px} .gind3{padding-left:54px}
 .okchk{color:#2f8f6b;font-weight:700;font-size:14px}
 .trend{position:relative;display:inline-block;width:200px;height:26px;vertical-align:middle}
 .trend svg{position:absolute;left:0;top:0}
@@ -579,6 +585,7 @@ function renderIndicators(){
   const el=$('#tab-indicators');
   el.innerHTML=`<div class="controls">
       <input type="text" id="q" placeholder="Search indicators…" value="${esc(state.q||'')}">
+      <span id="qCount" class="muted" style="font-size:12.5px;align-self:center"></span>
       <select id="fDomain"><option value="">All topics</option>${META.domains.map(d=>`<option>${esc(d)}</option>`).join('')}</select>
       <select id="fAgency"><option value="">All agencies</option>${META.agencies.map(a=>`<option value="${a.code}">${esc(a.name)}</option>`).join('')}</select>
       <select id="fSal">
@@ -595,12 +602,18 @@ function renderIndicators(){
     state.q=q.value; state.fdom=fd.value; state.fag=fa.value; state.fsal=fs.value;
     const term=q.value.trim().toLowerCase();
     const byText=x=>!term||(x.name||'').toLowerCase().includes(term)||(x.agency_name||'').toLowerCase().includes(term);
-    let r=INDS.filter(byText);
-    if(fd.value)r=r.filter(i=>i.domain===fd.value);
-    if(fa.value)r=r.filter(i=>i.agency===fa.value);
-    if(fs.value)r=r.filter(i=>i.salience===fs.value);
+    // apply the non-text filters first (these bound any group we pull in)
+    let base=INDS.slice();
+    if(fd.value)base=base.filter(i=>i.domain===fd.value);
+    if(fa.value)base=base.filter(i=>i.agency===fa.value);
+    if(fs.value)base=base.filter(i=>i.salience===fs.value);
+    // a term hit on any group member pulls the WHOLE group (within the filters)
+    const hitGroups=new Set(base.filter(byText).map(i=>i.group));
+    let r=base.filter(i=>byText(i)||hitGroups.has(i.group));
     r=r.slice().sort(indSort);
-    $('#indTable').innerHTML=indicatorTable(r,true);
+    const ng=new Set(r.map(i=>i.group)).size;
+    $('#qCount').textContent=`${r.length} indicator${r.length===1?'':'s'}${ng<r.length?` in ${ng} groups`:''}`;
+    $('#indTable').innerHTML=indicatorTable(r,true,term);
     attachSortable();
     writeHash(); restorePendingScroll();
   };
@@ -614,31 +627,56 @@ function alarmCell(i,nf){
   if(nf) return `<span style="color:#c98a1b;font-size:14px" title="Discontinuous data — no values reported for ${yrRange(i.flags)}">⚠</span>`;
   return '';
 }
-function indicatorTable(list,showAgency){
+function indicatorTable(list,showAgency,term){
   if(!list.length)return '<p class="muted" style="padding:14px">No indicators match.</p>';
   const SR={high:3,medium:2,low:1};
-  return `<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col style="width:108px"><col style="width:84px"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
+  const TH=`<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col style="width:108px"><col style="width:84px"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
     <th data-sort="text">Indicator</th><th${showAgency?' data-sort="text"':''}>${showAgency?'Agency':''}</th>
     <th data-sort="num" title="Click to sort by how long it has been tracked (longest first)"></th>
     <th data-sort="num">Change</th>
     <th data-sort="num" title="What the measure tracks: a public outcome, public participation, a government process, or resource expenditure.">Type</th>
     <th data-sort="num" title="Inferred salience — how much the measure matters to the public. Click to sort high-first.">Salience</th>
     <th data-sort="num" title="Active = reported in the latest MMR; otherwise the last fiscal year it appeared.">Status</th>
-    <th data-sort="num" title="⚠ = discontinuous or inadequately labeled; ✓ = a discontinuity reviewed and OK'd. Click to sort.">⚠</th></tr></thead><tbody>
-    ${list.map(i=>{
-      const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name), act=isActive(i);
-      const nf=i.flags?i.flags.length:0;
-      const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
-      const tb=i.type?`<span class="placard" style="background:#dfe6ea;color:#3a5360" title="${esc(i.type)}${i.type_conf&&i.type_conf!=='high'?' ('+i.type_conf+' confidence)':''}">${TYPE_SHORT[i.type]||i.type}</span>`:'';
-      return `<tr class="${act?'':'retired'}" onclick="openIndicator('${i.key}')">
-        <td data-sortval="${esc(sortName(i))}">${esc(pu.name)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
-        <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
-        <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
-        <td data-sortval="${TYPE_RANK[i.type]||0}">${tb}</td>
-        <td data-sortval="${SR[i.salience]||0}">${sb}</td>
-        <td data-sortval="${act?9999:y1}">${act?`<span class="placard" style="background:#e2efe6;color:#2f6f4f">Active</span>`:`<span class="placard" title="Last reported FY${y1}">Retired '${String(y1).slice(2)}</span>`}</td>
-        <td data-sortval="${i.annotation?1:(i.inadequate||nf)?-(nf||1):''}" style="text-align:center">${alarmCell(i,nf)}</td></tr>`;
-    }).join('')}</tbody></table>`;
+    <th data-sort="num" title="⚠ = discontinuous or inadequately labeled; ✓ = a discontinuity reviewed and OK'd. Click to sort.">⚠</th></tr></thead><tbody>`;
+  const hl=t=>{ if(!term) return esc(t); const i=t.toLowerCase().indexOf(term.toLowerCase());
+    return i<0?esc(t):esc(t.slice(0,i))+'<span class="ghit">'+esc(t.slice(i,i+term.length))+'</span>'+esc(t.slice(i+term.length)); };
+  const rowHTML=(i,cls,indent)=>{
+    const ys=yearsOf(i.series), y0=ys[0], y1=ys[ys.length-1], pct=pctChange(i), pu=parseUnit(i.name), act=isActive(i);
+    const nf=i.flags?i.flags.length:0;
+    const sb=i.salience?`<span class="placard" style="background:${i.salience==='high'?'#e3cabf':i.salience==='medium'?'#efe3c6':'#e6e4df'};color:#5a463c" title="${esc(i.salience_why||'')}">${i.salience}</span>`:'';
+    const tb=i.type?`<span class="placard" style="background:#dfe6ea;color:#3a5360" title="${esc(i.type)}${i.type_conf&&i.type_conf!=='high'?' ('+i.type_conf+' confidence)':''}">${TYPE_SHORT[i.type]||i.type}</span>`:'';
+    // within a group, show only the part of the name AFTER the parent stem
+    const shown = indent ? (pu.name.split(' - ').slice(indent).join(' - ')||pu.name) : pu.name;
+    return `<tr class="${act?'':'retired'} ${cls||''}" onclick="openIndicator('${i.key}')">
+      <td class="${indent?('gind'+Math.min(indent,3)):''}" data-sortval="${esc(sortName(i))}">${hl(shown)}</td><td class="muted"${showAgency?` data-sortval="${i.agency}">${i.agency}`:'>'}</td>
+      <td class="trendcell" data-sortval="${y0-y1}">${trendInner(i.series,pu.sfx)}</td>
+      <td data-sortval="${pct==null?'':pct}">${changeBadge(i)}</td>
+      <td data-sortval="${TYPE_RANK[i.type]||0}">${tb}</td>
+      <td data-sortval="${SR[i.salience]||0}">${sb}</td>
+      <td data-sortval="${act?9999:y1}">${act?`<span class="placard" style="background:#e2efe6;color:#2f6f4f">Active</span>`:`<span class="placard" title="Last reported FY${y1}">Retired '${String(y1).slice(2)}</span>`}</td>
+      <td data-sortval="${i.annotation?1:(i.inadequate||nf)?-(nf||1):''}" style="text-align:center">${alarmCell(i,nf)}</td></tr>`;
+  };
+  // group by i.group, preserving first-seen order of each group
+  const order=[], byg=new Map();
+  list.forEach(i=>{ const g=i.group||i.key; if(!byg.has(g)){byg.set(g,[]);order.push(g);} byg.get(g).push(i); });
+  let body='';
+  order.forEach(g=>{
+    const mem=byg.get(g);
+    if(mem.length===1){ body+=rowHTML(mem[0],'',0); return; }
+    // group: parent (depth 0) first if present, then children by depth then name
+    mem.sort((a,b)=>(a.depth-b.depth)||a.name.localeCompare(b.name));
+    const baseDepth=mem[0].depth;
+    const parent=mem.find(m=>m.depth===0);
+    if(!parent){ // no standalone parent: header label = the shared stem
+      const stem=(g.split('|')[1]||'');
+      body+=`<tr class="grouphdr"><td colspan="8">${hl(stem)}</td></tr>`;
+    }
+    mem.forEach((m,idx)=>{
+      const ind = m.depth - baseDepth;
+      body+= (parent&&idx===0) ? rowHTML(m,'gtop',0) : rowHTML(m,'subcat', Math.max(ind, parent?1:1));
+    });
+  });
+  return TH+body+`</tbody></table>`;
 }
 
 // ---- link decisions (saved in the browser, exported as a file for the pipeline) ----
@@ -846,6 +884,8 @@ function renderDetail(key){
       </div>
       <div class="panel">
         <h3 style="margin-bottom:8px">About this measure</h3>
+        ${/\(cy\b|calendar year/i.test(i.name)?`<div class="note" style="margin-bottom:8px">Reported on a <b>calendar-year</b> basis (values shown against the fiscal year of the report that printed them).</div>`:''}
+        ${/historical record/i.test(i.name)?`<div class="note" style="margin-bottom:8px">A long-run <b>fiscal-year</b> series the city itself publishes alongside the newer calendar-year measure.</div>`:''}
         ${i.desc?`<div class="def">${esc(i.desc)}${i.desc_src?` <span class="muted" style="font-size:11px">(${esc(i.desc_src)})</span>`:''}</div>`:'<p class="muted">No definition in the source data.</p>'}
         <div id="dirBox" style="margin:12px 0">${directionBox(i)}</div>
         <ul class="tight">
@@ -854,7 +894,19 @@ function renderDetail(key){
           ${i.period?`<li><strong>Reporting period:</strong> ${esc(i.period)}</li>`:''}
         </ul>
         <h3 style="margin:14px 0 4px">Source MMR(s)</h3>
-        <ul class="tight">${srcList}</ul>${renameNote}
+        ${i.eds&&i.eds.length?`<table style="font-size:12.5px;border-collapse:collapse">
+          <tr><th style="text-align:left;padding:2px 8px;color:var(--muted)">MMR</th><th style="text-align:left;padding:2px 8px;color:var(--muted)">printed as</th><th style="text-align:left;padding:2px 8px;color:var(--muted)">pdf p.</th></tr>
+          ${i.eds.map(e=>`<tr><td style="padding:2px 8px">${pu_urls[e[0]]?`<a href="${pu_urls[e[0]]}" target="_blank" rel="noopener">FY${e[0]}</a>`:`FY${e[0]}`}</td><td style="padding:2px 8px">${esc(e[1])}</td><td style="padding:2px 8px">${e[2]||''}</td></tr>`).join('')}
+        </table>${odYs.length?`<div class="muted" style="font-size:12px;margin-top:4px">FY${odYs[0]}–FY${odYs[odYs.length-1]} values: <a href="${META.opendata_url}" target="_blank" rel="noopener">NYC Open Data</a></div>`:''}`
+        :`<ul class="tight">${srcList}</ul>${renameNote}`}
+        ${i.restat&&i.restat.length?`<h3 style="margin:14px 0 4px">Restated values</h3>
+        <table style="font-size:12.5px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px;color:var(--muted)">year</th><th style="text-align:left;padding:2px 8px;color:var(--muted)">superseded</th><th style="text-align:left;padding:2px 8px;color:var(--muted)">kept (later edition)</th></tr>
+        ${i.restat.map(r=>`<tr><td style="padding:2px 8px">${r[0]}</td><td style="padding:2px 8px">${r[1]}</td><td style="padding:2px 8px">${r[3]} (FY${r[2]})</td></tr>`).join('')}</table>`:''}
+        ${i.seam_notes&&i.seam_notes.length?i.seam_notes.map(n=>`<div class="note" style="margin-top:8px">${esc(n)}</div>`).join(''):''}
+        ${i.nw_notes&&i.nw_notes.length?`<h3 style="margin:14px 0 4px">Noteworthy changes (from the MMR)</h3>
+        ${i.nw_notes.map(n=>`<div style="margin-bottom:7px;font-size:13px"><span class="muted">FY${n[0]} MMR p.${n[1]}${n[2]?' · '+esc(n[2]):''}</span><div>${esc(n[3])}</div></div>`).join('')}`:''}
+        ${i.nodef?`<div class="note" style="margin-top:8px;color:#9a6a00;border-top-color:#f0d9a8">No definition matched — not in the FY2002–2011 definitions appendices nor the NYC Open Data catalog.</div>`:''}
+        ${i.alerts&&i.alerts.length?`<div class="note" style="margin-top:8px;color:#9a6a00;border-top-color:#f0d9a8">⚑ Under review: ${i.alerts.map(esc).join(', ')} — see the editorial review queue.</div>`:''}
         ${(i.agencies&&i.agencies.length>1&&i.agency_years)?`<div class="note" style="margin-top:10px">Reported in more than one agency's chapter: ${i.agencies.map(c=>`<b>${esc(c)}</b> (${yrRanges(i.agency_years[c]||[])})`).join('; ')}. Where multiple agencies reported it in the same year, the figure was identical.</div>`:''}
         ${(i.merged_names&&i.merged_names.length)?`<div class="note" style="margin-top:8px">This series combines records the city also published under: ${i.merged_names.map(n=>`“${esc(n)}”`).join('; ')} — identical values where they overlap.</div>`:''}
       </div>
