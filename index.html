@@ -152,6 +152,18 @@ const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>n==null?'—':(Math.abs(n)>=1000?n.toLocaleString(undefined,{maximumFractionDigits:0}):(Number.isInteger(n)?n:n.toLocaleString(undefined,{maximumFractionDigits:2})));
+// Noteworthy bullet body. Some MMR "noteworthy changes" are SECTION notes that
+// list every indicator added/removed that year ("The following indicators were
+// added to this report: '…', '…', '…'"). The same paragraph attaches to each
+// indicator named, so on any one it reads as a wall of OTHER names (and the raw
+// text was truncated before reaching the relevant one). Collapse those to the
+// single fact that applies here; keep the full text for substantive notes
+// (renames, redefinitions, target/correction changes).
+const nwBody=tx=>{
+  if(/following indicators?\s+(were|was|are|is)\s+(added|introduced|created)/i.test(tx)) return 'Added to the MMR this year.';
+  if(/following indicators?\s+(were|was|are|is)\s+(removed|deleted|discontinued|retired|eliminated|dropped)/i.test(tx)) return 'Removed from the MMR this year.';
+  return esc(tx);
+};
 // pull a unit out of a trailing "(...)" in the indicator name, when it's a
 // recognized unit, so we can show "94%" / "10 days" instead of cluttering the name.
 const UNITRE=/\s*\(([^()]+)\)\s*$/;
@@ -960,10 +972,10 @@ function renderDetail(key){
         :`<ul class="tight">${srcList}</ul>${renameNote}`}
         ${i.restat&&i.restat.length?`<h3 style="margin:14px 0 4px">Restated values</h3>
         <table style="font-size:12.5px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px;color:var(--muted)">year</th><th style="text-align:left;padding:2px 8px;color:var(--muted)">superseded</th><th style="text-align:left;padding:2px 8px;color:var(--muted)">kept (later edition)</th></tr>
-        ${i.restat.map(r=>`<tr><td style="padding:2px 8px">${r[0]}</td><td style="padding:2px 8px">${r[1]}</td><td style="padding:2px 8px">${r[3]} (FY${r[2]})</td></tr>`).join('')}</table>`:''}
+        ${i.restat.map(r=>`<tr><td style="padding:2px 8px">FY${r[0]}</td><td style="padding:2px 8px">${fmt(r[1])}</td><td style="padding:2px 8px">${fmt(r[3])} (FY${r[2]})</td></tr>`).join('')}</table>`:''}
         ${i.seam_notes&&i.seam_notes.length?i.seam_notes.map(n=>`<div class="note" style="margin-top:8px">${esc(n)}</div>`).join(''):''}
         ${i.nw_notes&&i.nw_notes.length?`<h3 style="margin:14px 0 4px">Noteworthy changes (from the MMR)</h3>
-        ${i.nw_notes.map(n=>`<div style="margin-bottom:7px;font-size:13px"><span class="muted">FY${n[0]} MMR p.${n[1]}${n[2]?' · '+esc(n[2]):''}</span><div>${esc(n[3])}</div></div>`).join('')}`:''}
+        ${i.nw_notes.map(n=>`<div style="margin-bottom:7px;font-size:13px"><span class="muted">FY${n[0]} MMR p.${n[1]}${n[2]?' · '+esc(n[2]):''}</span><div>${nwBody(n[3])}</div></div>`).join('')}`:''}
         ${i.nodef?`<div class="note" style="margin-top:8px;color:#9a6a00;border-top-color:#f0d9a8">No definition matched — not in the FY2002–2011 definitions appendices nor the NYC Open Data catalog.</div>`:''}
         ${i.alerts&&i.alerts.length?`<div class="note" style="margin-top:8px;color:#9a6a00;border-top-color:#f0d9a8">⚑ Under review: ${i.alerts.map(esc).join(', ')} — see the editorial review queue.</div>`:''}
         ${(i.agencies&&i.agencies.length>1&&i.agency_years)?`<div class="note" style="margin-top:10px">Reported in more than one agency's chapter: ${i.agencies.map(c=>`<b>${esc(c)}</b> (${yrRanges(i.agency_years[c]||[])})`).join('; ')}. Where multiple agencies reported it in the same year, the figure was identical.</div>`:''}
