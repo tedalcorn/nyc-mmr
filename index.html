@@ -619,15 +619,20 @@ function renderAgencies(){
 function renderAgency(code){
   const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
   const inds=INDS.filter(i=>i.agency===code||(i.agencies&&i.agencies.includes(code)));
-  const mmr=!!state.mmrOrder, ov=i=>(i.mmr_ord==null?Infinity:i.mmr_ord);
+  const mmr=!!state.mmrOrder;
+  // print position is PER AGENCY (i.mmr_pos[code]=[seq,section]) so a shared
+  // indicator uses THIS agency's section/order, not another chapter's.
+  const ppos=i=>(i.mmr_pos&&i.mmr_pos[code])||null;
+  const ov=i=>{const p=ppos(i);return p?p[0]:Infinity;};
   // GROUPING: by salience-ordered service area (default), OR by the MMR's
   // printed Service/Goal section (mmr). In MMR mode, indicators not found in
   // the printed FY2025 report fall to two catch-alls shown last: still-active
   // ones (Open Data only) and retired ones.
   const OTH='Other current indicators', RET='Retired indicators';
-  const groupKey=i=> mmr ? (i.mmr_section || (isActive(i)?OTH:RET)) : (i.service||'Other');
+  const groupKey=i=>{ if(!mmr) return i.service||'Other'; const p=ppos(i); return p?p[1]:(isActive(i)?OTH:RET); };
   const groups={};
-  inds.forEach(i=>{ const k=groupKey(i); (groups[k]=groups[k]||[]).push(i); });
+  // stamp the per-agency order onto each row so indicatorTable can sort by it
+  inds.forEach(i=>{ i._mord=ov(i); const k=groupKey(i); (groups[k]=groups[k]||[]).push(i); });
   Object.values(groups).forEach(g=>g.sort(mmr?((x,y)=>ov(x)-ov(y)||indSort(x,y)):indSort));
   const minOrd=k=>Math.min(...groups[k].map(ov));
   const tail={[OTH]:1,[RET]:2};   // catch-alls sort after the real sections
@@ -735,7 +740,7 @@ function indicatorTable(list,showAgency,term,mmrMode){
   const order=[], byg=new Map();
   list.forEach(i=>{ const g=i.group||i.key; if(!byg.has(g)){byg.set(g,[]);order.push(g);} byg.get(g).push(i); });
   // MMR document-order mode: order groups by their earliest printed position
-  const _ov=i=>(i.mmr_ord==null?Infinity:i.mmr_ord);
+  const _ov=i=>(i._mord==null?Infinity:i._mord);   // per-agency order stamped by renderAgency
   if(mmrMode) order.sort((g1,g2)=>Math.min(...byg.get(g1).map(_ov))-Math.min(...byg.get(g2).map(_ov)));
   let body='';
   order.forEach(g=>{
