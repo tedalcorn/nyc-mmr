@@ -629,12 +629,12 @@ function renderAgency(code){
   // stamp the per-agency MMR order onto each row (indicatorTable sorts by it)
   inds.forEach(i=>{ i._mord=ov(i); });
   const link=(on,lbl)=>`<a href="#" onclick="setAgencyOrder(${on},'${code}');return false" style="${mmr===on?'font-weight:600':'color:var(--muted)'}">${lbl}</a>`;
-  const tog=`<div style="font-size:12px;margin-top:6px;color:var(--muted)">Order: ${link(true,'as printed in the MMR')} · ${link(false,'by salience')}${mmr?` <span title="Grouped into the FY2025 MMR's Service/Goal sections, in printed order. Measures with recent data only (not in the printed report) appear under 'Other current indicators'; retired ones under 'Retired indicators'.">ⓘ</span>`:` <span title="One table, every indicator, sorted by salience then recency. Click any column heading to re-sort.">ⓘ</span>`}</div>`;
+  const tog=`<div style="font-size:12px;margin-top:6px;color:var(--muted)">Order: ${link(true,'as printed in the MMR')} · ${link(false,'by salience')}${mmr?` <span title="Grouped into the FY2025 MMR's Service/Goal sections, in printed order. Measures with recent data only (not in the printed report) appear under 'Other current indicators'; retired or not-yet-linked ones under 'Retired or unlinked indicators'.">ⓘ</span>`:` <span title="One table, every indicator, sorted by salience then recency. Click any column heading to re-sort.">ⓘ</span>`}</div>`;
   let bodyHTML;
   if(mmr){
     // group into the MMR's printed Service/Goal sections; indicators absent
     // from the printed FY2025 report fall to two catch-alls shown last.
-    const OTH='Other current indicators', RET='Retired indicators';
+    const OTH='Other current indicators', RET='Retired or unlinked indicators';
     const groupKey=i=>{ const p=ppos(i); return p?p[1]:(isActive(i)?OTH:RET); };
     const groups={};
     inds.forEach(i=>{ const k=groupKey(i); (groups[k]=groups[k]||[]).push(i); });
