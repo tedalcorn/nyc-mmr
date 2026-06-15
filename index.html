@@ -619,17 +619,27 @@ function renderAgencies(){
 function renderAgency(code){
   const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
   const inds=INDS.filter(i=>i.agency===code||(i.agencies&&i.agencies.includes(code)));
+  const mmr=!!state.mmrOrder, ov=i=>(i.mmr_ord==null?Infinity:i.mmr_ord);
   // group by service area
   const bySvc={};
   inds.forEach(i=>{(bySvc[i.service||'Other']=bySvc[i.service||'Other']||[]).push(i);});
-  Object.values(bySvc).forEach(g=>g.sort(indSort));   // active, then salience, then type
+  // within a service area: salience order (default) OR printed MMR order
+  Object.values(bySvc).forEach(g=>g.sort(mmr?((x,y)=>ov(x)-ov(y)||indSort(x,y)):indSort));
+  // service-area panels: alpha ('Other' last) by default; document order when MMR
+  const svcKeys=Object.keys(bySvc).sort(mmr
+    ?((x,y)=>Math.min(...bySvc[x].map(ov))-Math.min(...bySvc[y].map(ov)))
+    :((x,y)=>((x==='Other')-(y==='Other'))||x.localeCompare(y)));
+  const link=(on,lbl)=>`<a href="#" onclick="setAgencyOrder(${on},'${code}');return false" style="${mmr===on?'font-weight:600':'color:var(--muted)'}">${lbl}</a>`;
+  const tog=`<div style="font-size:12px;margin-top:6px;color:var(--muted)">Order: ${link(false,'by importance')} · ${link(true,'as printed in the MMR')}${mmr?` <span title="Indicators ordered as they appear in the FY2025 MMR. Measures with recent data only (not found in the printed FY2025 report) sort to the end of each section.">ⓘ</span>`:''}</div>`;
   el.innerHTML=`<span class="backlink" onclick="go({agency:null})">← All agencies</span>
     <div class="detail-head"><div><h2>${esc(a.name)}</h2>
     <div class="sub">${code} · ${(a.n_active??inds.length)} active · ${inds.length} reported all-time · <span class="pill" style="background:${DOMAIN_COLOR[a.domain]}">${esc(a.domain)}</span></div>
-    ${a.former?`<div class="ctx" style="margin-top:5px">Historical measures here include those once reported under: ${a.former.map(esc).join('; ')}.</div>`:''}</div></div>
-    ${Object.keys(bySvc).sort((a,b)=>((a==='Other')-(b==='Other'))||a.localeCompare(b)).map(svc=>`<div class="panel">
-      <h3 style="margin-bottom:8px">${esc(svc)}</h3>${indicatorTable(bySvc[svc],false)}</div>`).join('')}`;
+    ${a.former?`<div class="ctx" style="margin-top:5px">Historical measures here include those once reported under: ${a.former.map(esc).join('; ')}.</div>`:''}
+    ${tog}</div></div>
+    ${svcKeys.map(svc=>`<div class="panel">
+      <h3 style="margin-bottom:8px">${esc(svc)}</h3>${indicatorTable(bySvc[svc],false,null,mmr)}</div>`).join('')}`;
 }
+function setAgencyOrder(v,code){ state.mmrOrder=v; renderAgency(code); }
 
 /* ---------- INDICATORS (explore + detail) ---------- */
 function renderIndicators(){
@@ -678,7 +688,7 @@ function alarmCell(i,nf){
   if(nf) return `<span style="color:#c98a1b;font-size:14px" title="Discontinuous data — no values reported for ${yrRange(i.flags)}">⚠</span>`;
   return '';
 }
-function indicatorTable(list,showAgency,term){
+function indicatorTable(list,showAgency,term,mmrMode){
   if(!list.length)return '<p class="muted" style="padding:14px">No indicators match.</p>';
   const SR={high:3,medium:2,low:1};
   const TH=`<table class="sortable indtable"><colgroup><col><col class="cAg"><col class="cTr"><col class="cCh"><col style="width:108px"><col style="width:84px"><col class="cSt"><col style="width:34px"></colgroup><thead><tr>
@@ -719,6 +729,9 @@ function indicatorTable(list,showAgency,term){
   // group by i.group, preserving first-seen order of each group
   const order=[], byg=new Map();
   list.forEach(i=>{ const g=i.group||i.key; if(!byg.has(g)){byg.set(g,[]);order.push(g);} byg.get(g).push(i); });
+  // MMR document-order mode: order groups by their earliest printed position
+  const _ov=i=>(i.mmr_ord==null?Infinity:i.mmr_ord);
+  if(mmrMode) order.sort((g1,g2)=>Math.min(...byg.get(g1).map(_ov))-Math.min(...byg.get(g2).map(_ov)));
   let body='';
   order.forEach(g=>{
     const mem=byg.get(g);
@@ -727,7 +740,7 @@ function indicatorTable(list,showAgency,term){
     // under its own parent; sibling sets ordered by pattern — spectrum /
     // process / ordinal / biggest-first, with "Other" & retired sunk). Sort
     // by it alone; depth drives only the indentation below.
-    mem.sort((a,b)=>((a.gord??0)-(b.gord??0))||a.name.localeCompare(b.name));
+    mem.sort(mmrMode?((a,b)=>_ov(a)-_ov(b)||(a.depth-b.depth)):((a,b)=>((a.gord??0)-(b.gord??0))||a.name.localeCompare(b.name)));
     const baseDepth=mem[0].depth;
     const parent=mem.find(m=>m.depth===0);
     // if the whole family is retired (and the top row carries no live data of
