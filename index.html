@@ -620,24 +620,29 @@ function renderAgency(code){
   const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
   const inds=INDS.filter(i=>i.agency===code||(i.agencies&&i.agencies.includes(code)));
   const mmr=!!state.mmrOrder, ov=i=>(i.mmr_ord==null?Infinity:i.mmr_ord);
-  // group by service area
-  const bySvc={};
-  inds.forEach(i=>{(bySvc[i.service||'Other']=bySvc[i.service||'Other']||[]).push(i);});
-  // within a service area: salience order (default) OR printed MMR order
-  Object.values(bySvc).forEach(g=>g.sort(mmr?((x,y)=>ov(x)-ov(y)||indSort(x,y)):indSort));
-  // service-area panels: alpha ('Other' last) by default; document order when MMR
-  const svcKeys=Object.keys(bySvc).sort(mmr
-    ?((x,y)=>Math.min(...bySvc[x].map(ov))-Math.min(...bySvc[y].map(ov)))
+  // GROUPING: by salience-ordered service area (default), OR by the MMR's
+  // printed Service/Goal section (mmr). In MMR mode, indicators not found in
+  // the printed FY2025 report fall to two catch-alls shown last: still-active
+  // ones (Open Data only) and retired ones.
+  const OTH='Other current indicators', RET='Retired indicators';
+  const groupKey=i=> mmr ? (i.mmr_section || (isActive(i)?OTH:RET)) : (i.service||'Other');
+  const groups={};
+  inds.forEach(i=>{ const k=groupKey(i); (groups[k]=groups[k]||[]).push(i); });
+  Object.values(groups).forEach(g=>g.sort(mmr?((x,y)=>ov(x)-ov(y)||indSort(x,y)):indSort));
+  const minOrd=k=>Math.min(...groups[k].map(ov));
+  const tail={[OTH]:1,[RET]:2};   // catch-alls sort after the real sections
+  const keys=Object.keys(groups).sort(mmr
+    ?((x,y)=>((tail[x]||0)-(tail[y]||0))||(minOrd(x)-minOrd(y)))
     :((x,y)=>((x==='Other')-(y==='Other'))||x.localeCompare(y)));
   const link=(on,lbl)=>`<a href="#" onclick="setAgencyOrder(${on},'${code}');return false" style="${mmr===on?'font-weight:600':'color:var(--muted)'}">${lbl}</a>`;
-  const tog=`<div style="font-size:12px;margin-top:6px;color:var(--muted)">Order: ${link(false,'by importance')} · ${link(true,'as printed in the MMR')}${mmr?` <span title="Indicators ordered as they appear in the FY2025 MMR. Measures with recent data only (not found in the printed FY2025 report) sort to the end of each section.">ⓘ</span>`:''}</div>`;
+  const tog=`<div style="font-size:12px;margin-top:6px;color:var(--muted)">Order: ${link(false,'by importance')} · ${link(true,'as printed in the MMR')}${mmr?` <span title="Grouped into the FY2025 MMR's Service/Goal sections, in printed order. Measures with recent data only (not in the printed report) appear under 'Other current indicators'; retired ones under 'Retired indicators'.">ⓘ</span>`:''}</div>`;
   el.innerHTML=`<span class="backlink" onclick="go({agency:null})">← All agencies</span>
     <div class="detail-head"><div><h2>${esc(a.name)}</h2>
     <div class="sub">${code} · ${(a.n_active??inds.length)} active · ${inds.length} reported all-time · <span class="pill" style="background:${DOMAIN_COLOR[a.domain]}">${esc(a.domain)}</span></div>
     ${a.former?`<div class="ctx" style="margin-top:5px">Historical measures here include those once reported under: ${a.former.map(esc).join('; ')}.</div>`:''}
     ${tog}</div></div>
-    ${svcKeys.map(svc=>`<div class="panel">
-      <h3 style="margin-bottom:8px">${esc(svc)}</h3>${indicatorTable(bySvc[svc],false,null,mmr)}</div>`).join('')}`;
+    ${keys.map(k=>`<div class="panel">
+      <h3 style="margin-bottom:8px">${esc(k)}</h3>${indicatorTable(groups[k],false,null,mmr)}</div>`).join('')}`;
 }
 function setAgencyOrder(v,code){ state.mmrOrder=v; renderAgency(code); }
 
