@@ -616,6 +616,10 @@ function renderAgencies(){
           <div class="meta">${(a.n_active??a.n_indicators)} active in latest MMR</div>
           <div class="meta">${a.n_indicators} reported all-time</div></div>`).join('')}</div></div>`).join('')}`;
 }
+// a long MMR goal heading wrapped across PDF lines is captured only to the first
+// line, which can end mid-hyphenation ("...participation in skills-."). Show that
+// as a clean crop ending in an ellipsis rather than a dangling hyphen.
+function cleanSection(s){ return /[a-z]-\.?$/i.test(s) ? s.replace(/-\.?$/,'')+'…' : s; }
 function renderAgency(code){
   const a=META.agencies.find(x=>x.code===code), el=$('#tab-agencies');
   const inds=INDS.filter(i=>i.agency===code||(i.agencies&&i.agencies.includes(code)));
@@ -643,7 +647,7 @@ function renderAgency(code){
     const tail={[OTH]:1,[RET]:2};   // catch-alls sort after the real sections
     const keys=Object.keys(groups).sort((x,y)=>((tail[x]||0)-(tail[y]||0))||(minOrd(x)-minOrd(y)));
     bodyHTML=keys.map(k=>`<div class="panel">
-      <h3 style="margin-bottom:8px">${esc(k)}</h3>${indicatorTable(groups[k],false,null,true)}</div>`).join('');
+      <h3 style="margin-bottom:8px">${esc(cleanSection(k))}</h3>${indicatorTable(groups[k],false,null,true)}</div>`).join('');
   } else {
     // salience mode: NO section headings — one table, everything in it
     bodyHTML=`<div class="panel">${indicatorTable(inds.slice().sort(indSort),false,null,false)}</div>`;
