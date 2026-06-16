@@ -178,7 +178,7 @@ function parseUnit(name){
 }
 const fmtU=(v,sfx)=>v==null?'—':(sfx==='$'?'$'+fmt(v):fmt(v)+(sfx||''));
 // "active" = reported in the latest complete MMR year
-const isActive=i=>i.series[String(META.fy_max)]!=null;
+const isActive=i=>i.series[String(META.fy_max)]!=null && !i.force_retired;
 const SAL_RANK={high:3,medium:2,low:1};
 const TYPE_RANK={'public outcome':4,'public participation':3,'government process':2,'resource expenditure':1};
 // default ordering everywhere: active first, then salience high->low, then type
