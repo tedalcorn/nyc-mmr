@@ -1156,30 +1156,39 @@ function _wrap(c,text,maxW,maxLines){
   return lines;
 }
 
-function exportIndicatorJPG(key){
+function exportIndicatorJPG(key,opts){
+  opts=opts||{};
   const i=BYKEY[key]; if(!i) return;
   const pu=parseUnit(i.name);
   const ys=yearsOf(i.series), fy0=ys[0], fyN=ys[ys.length-1];
   const fullYs=Array.from({length:fyN-fy0+1},(_,k)=>fy0+k);
-  const allInt=ys.every(y=>Number.isInteger(i.series[y]));
-  const S=2;                                  // retina multiplier — everything below is drawn into an innerW*S buffer
-  // datasets (mirror the on-screen detail chart; legend only when >1 series). Strokes/points sized for the hi-res buffer.
-  const ds=[{label:i.is_dollar?'Nominal $':(pu.name||i.name),data:fullYs.map(y=>i.series[y]??null),
-    borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,
-    pointRadius:fullYs.map(y=>i.series[y]==null?0:2.4*S),pointBackgroundColor:'#b9381f',pointBorderColor:'#b9381f'}];
-  if(i.real) ds.push({label:'Inflation-adjusted ('+META.cpi_base_year+' $)',data:fullYs.map(y=>i.real[y]??null),borderColor:'#2e6f8e',borderWidth:2.4*S,borderDash:[6,4],tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>i.real[y]==null?0:2*S),pointBackgroundColor:'#2e6f8e',pointBorderColor:'#2e6f8e'});
-  if(i.targets) ds.push({label:'MMR target',data:fullYs.map(y=>i.targets[y]??null),borderColor:'#9a958a',borderWidth:1.6*S,borderDash:[5,5],tension:.1,backgroundColor:'transparent',spanGaps:true,pointRadius:0});
+  const mode=opts.series||'both';
+  const sc=opts.scale||1;
+  const allInt=(mode!=='real')&&sc===1&&ys.every(y=>Number.isInteger(i.series[y]));
+  const S=2;
+  const mk=(o)=>fullYs.map(y=>(o&&o[y]!=null)?o[y]*sc:null);
+  const ds=[];
+  if(mode==='real'){
+    ds.push({data:mk(i.real),borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>(i.real&&i.real[y]!=null)?2.4*S:0),pointBackgroundColor:'#b9381f',pointBorderColor:'#b9381f'});
+  } else {
+    ds.push({label:i.is_dollar?'Nominal $':(pu.name||i.name),data:mk(i.series),borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>i.series[y]==null?0:2.4*S),pointBackgroundColor:'#b9381f',pointBorderColor:'#b9381f'});
+    if(i.real && mode!=='nominal') ds.push({label:'Inflation-adjusted ('+META.cpi_base_year+' $)',data:mk(i.real),borderColor:'#2e6f8e',borderWidth:2.4*S,borderDash:[6,4],tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>(i.real&&i.real[y]!=null)?2*S:0),pointBackgroundColor:'#2e6f8e',pointBorderColor:'#2e6f8e'});
+  }
+  if(i.targets && !opts.noTarget) ds.push({label:'MMR target',data:mk(i.targets),borderColor:'#9a958a',borderWidth:1.6*S,borderDash:[5,5],tension:.1,backgroundColor:'transparent',spanGaps:true,pointRadius:0});
   const multi=ds.length>1;
-  let yTitle=(pu.sfx&&pu.sfx.trim())||i.unit||'';
-  if(yTitle==='$') yTitle='US dollars'; else if(yTitle==='%') yTitle='Percent';
+  const title=opts.title||pu.name||i.name;
+  const desc=(opts.desc!=null)?opts.desc:i.desc;
+  let yTitle;
+  if(opts.ylabel!==undefined){ yTitle=opts.ylabel; }
+  else { yTitle=(pu.sfx&&pu.sfx.trim())||i.unit||''; if(yTitle==='$') yTitle='US dollars'; else if(yTitle==='%') yTitle='Percent'; }
 
   const cardW=1080, pad=56, innerW=cardW-2*pad, chartH=600;
   // pre-measure title + definition + source on a scratch ctx to size the card
   const meas=document.createElement('canvas').getContext('2d');
   meas.font=`bold ${38}px Georgia,'Times New Roman',serif`;
-  const titleLines=_wrap(meas,pu.name||i.name,innerW,3);
+  const titleLines=_wrap(meas,title,innerW,opts.titleMaxLines||3);
   meas.font=`18.5px Arial,Helvetica,sans-serif`;
-  const defLines=i.desc?_wrap(meas,i.desc,innerW,5):[];
+  const defLines=desc?_wrap(meas,desc,innerW,5):[];
   const agency=_agencyFull(i.agency_name||(typeof agencyName==='function'?agencyName(i.agency):'')||i.agency);
   const srcTxt='Source: '+((i.source&&i.source.toLowerCase()!==(agency||'').toLowerCase())?i.source+', ':'')+agency;
   meas.font=`17px Arial,Helvetica,sans-serif`;
@@ -1203,7 +1212,7 @@ function exportIndicatorJPG(key){
   const chart=new Chart(cc.getContext('2d'),{type:'line',data:{labels:fullYs.map(String),datasets:ds},
     options:{responsive:false,maintainAspectRatio:false,animation:false,devicePixelRatio:1,
       layout:{padding:6*S},
-      plugins:{legend:{display:multi,labels:{usePointStyle:true,boxWidth:13*S,font:{size:12.5*S}}}},
+      plugins:{legend:{display:multi&&!opts.noLegend,labels:{usePointStyle:true,boxWidth:13*S,font:{size:12.5*S}}}},
       scales:{x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:12,font:{size:12.5*S}}},
         y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.07)'},ticks:{font:{size:12.5*S},precision:allInt?0:undefined,callback:v=>fmt(v)},
           title:{display:!!yTitle,text:yTitle,font:{size:13*S,weight:'600'}}}}}});
@@ -1224,6 +1233,27 @@ function exportIndicatorJPG(key){
       let dy=ty+8+18; defLines.forEach(l=>{ c.fillText(l,pad*S,dy*S); dy+=defLH; }); }
     // chart
     c.drawImage(chart.canvas,pad*S,yChartTop*S,innerW*S,chartH*S);
+    // start/end value labels (black). below declining lines, above ascending.
+    if(opts.labelEnds){
+      const li=(opts.labelWhich==='real'&&ds.length>1)?1:0;
+      const arr=ds[li].data;
+      let i0=arr.findIndex(v=>v!=null), i1=arr.length-1; while(i1>i0 && arr[i1]==null) i1--;
+      if(i0>=0 && i1>i0){
+        const meta=chart.getDatasetMeta(li).data;
+        const BELOW=32*S, ABOVE=-18*S;   // label sits opposite the line's local direction (never over it)
+        let j0=i0+1; while(j0<i1 && arr[j0]==null) j0++;
+        let j1=i1-1; while(j1>i0 && arr[j1]==null) j1--;
+        const startDy=(arr[j0]>arr[i0])?BELOW:ABOVE;   // line rises out of start -> label below
+        const endDy=(arr[i1]>arr[j1])?ABOVE:BELOW;      // line rose into end -> label above
+        const fmtv=(v)=>{ if(opts.labelPrefix!=null||opts.labelSuffix!=null) return (opts.labelPrefix||'')+fmt(Math.round(v))+(opts.labelSuffix||''); try{ return (typeof fmtU==='function')?fmtU(v,pu.sfx):fmt(v); }catch(e){ return fmt(v); } };
+        c.fillStyle='#111'; c.font=`bold ${18*S}px Arial,Helvetica,sans-serif`; c.textBaseline='alphabetic';
+        c.textAlign='left';
+        c.fillText(fmtv(arr[i0]), pad*S+meta[i0].x, yChartTop*S+meta[i0].y+startDy);
+        c.textAlign='right';
+        c.fillText(fmtv(arr[i1]), pad*S+meta[i1].x, yChartTop*S+meta[i1].y+endDy);
+        c.textAlign='left';
+      }
+    }
     // source
     c.fillStyle='#555'; c.font=`${17*S}px Arial,Helvetica,sans-serif`;
     let sy=ySrcTop+15; srcLines.forEach(l=>{ c.fillText(l,pad*S,sy*S); sy+=srcLH; });
