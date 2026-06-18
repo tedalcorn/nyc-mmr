@@ -1081,15 +1081,34 @@ function _unitParen(i,pu){
   return i.unit?' ('+i.unit+')':'';
 }
 
+const _SITE='https://tedalcorn.github.io/nyc-mmr';
+function _indURL(i){ return _SITE+'/#tab=indicators&key='+encodeURIComponent(i.key); }
+
 function exportIndicatorCSV(key){
   const i=BYKEY[key]; if(!i) return;
   const pu=parseUnit(i.name), ys=yearsOf(i.series);
   const base=(pu.name||i.name)+_unitParen(i,pu);
+  const agency=_agencyFull(i.agency_name||(typeof agencyName==='function'?agencyName(i.agency):'')||i.agency);
+  const unit=_unitParen(i,pu).replace(/^ \(|\)$/g,'')||(i.unit||'');
+  // "About this source" preamble (key/value rows), then a blank line, then the data table
+  const rows=[
+    ["New York City Mayor's Management Report — indicator data"],
+    ['Indicator', pu.name||i.name],
+    ['Agency', agency],
+  ];
+  if(i.source) rows.push(['Data source', i.source]);
+  if(unit) rows.push(['Unit', unit]);
+  if(i.desc) rows.push(['Definition', i.desc]);
+  rows.push(['Coverage', 'FY'+ys[0]+'–FY'+ys[ys.length-1]]);
+  if(i.period) rows.push(['Reporting period', i.period]);
+  (i.seam_notes||[]).forEach(n=>rows.push(['Note', n]));
+  rows.push(['Downloaded from', _indURL(i)]);
+  rows.push([]);   // blank separator
   const head=['Fiscal Year', i.real?base+' — nominal':base];
   if(i.real) head.push(base+' — inflation-adjusted ('+META.cpi_base_year+' $)');
   if(i.targets) head.push('MMR target');
   head.push('Source (MMR / Open Data URL)');
-  const rows=[head];
+  rows.push(head);
   for(const y of ys){
     const r=['FY'+y, i.series[y]??''];
     if(i.real) r.push(i.real[y]??'');
