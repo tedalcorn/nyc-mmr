@@ -17,8 +17,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 header{padding:22px 24px 8px;max-width:1180px;margin:0 auto}
-header h1{font-size:23px;font-weight:700;letter-spacing:-.3px}
+header h1{font-size:26px;font-weight:700;letter-spacing:-.5px}
+header h1 .brand-nyc{font-weight:400;color:var(--muted)}
+header h1 .brand-pulse{font-weight:800;color:var(--ink)}
 header p{color:var(--muted);font-size:14px;margin-top:3px;max-width:760px}
+.intro{max-width:830px;margin:2px 0 24px}
+.intro p{font-size:17.5px;line-height:1.6;color:var(--ink);margin:0 0 11px}
+.intro p:last-child{margin-bottom:0;font-size:16px;color:#46443e}
+.about-wrap{max-width:820px}
+.about-wrap p{font-size:15.5px;line-height:1.65;margin:11px 0;color:var(--ink)}
+.about-wrap p.lede{font-size:18px;line-height:1.55;color:var(--ink)}
+.about-wrap h3{margin:26px 0 6px;font-size:16.5px;font-weight:700}
+.about-wrap ul.tight{margin:8px 0}
+.about-wrap ul.tight li{margin-bottom:11px;line-height:1.6;font-size:15px}
+.about-wrap .caveat{margin-top:18px;padding:13px 15px;background:#faf9f6;border-left:3px solid var(--line);border-radius:0 6px 6px 0;font-size:14.5px;line-height:1.6;color:#46443e}
 nav.tabs{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);
   display:flex;gap:2px;padding:0 24px;max-width:1180px;margin:10px auto 0;flex-wrap:wrap}
 nav.tabs button{padding:11px 15px;background:none;border:none;border-bottom:2px solid transparent;
@@ -128,8 +140,8 @@ ul.tight{margin:8px 0 0 18px}ul.tight li{margin:3px 0;font-size:13.5px}
 </head>
 <body>
 <header>
-  <h1 id="hdrTitle">New York City Performance Tracker</h1>
-  <p>Explore data from the <strong>Mayor's Management Report</strong>, the city's biannual account of how its agencies are performing.</p>
+  <h1 id="hdrTitle"><span class="brand-nyc">NYC</span><span class="brand-pulse">Pulse</span></h1>
+  <p>Longitudinal data from the <strong>Mayor's Management Report</strong>, New York City's regular accounting of how its agencies are doing.</p>
 </header>
 <nav class="tabs">
   <button data-tab="overview" class="active">Overview</button>
@@ -538,7 +550,7 @@ function notablePanel(){
   const pins=pinnedMoves(), pk=new Set(pins.map(o=>o.i.key));
   const pimp=pins.filter(o=>o.better), pwor=pins.filter(o=>!o.better);
   // pinned measures lead each column; fill the rest with the diversified top movers
-  const merge=(p,algo)=>[...p, ...diversifyByDomain(algo.filter(o=>!pk.has(o.i.key)), Math.max(0,8-p.length), 2)];
+  const merge=(p,algo)=>[...p, ...diversifyByDomain(algo.filter(o=>!pk.has(o.i.key)), Math.max(0,10-p.length), 2)];
   const I=merge(pimp,imp), W=merge(pwor,wor);
   if(!I.length&&!W.length) return '';
   const pad=Math.max(I.length,W.length);
@@ -556,7 +568,12 @@ function renderOverview(){
   const ipy=m.indicators_per_year;
   const years=Object.keys(ipy).sort((a,b)=>+a-+b);
   const el=$('#tab-overview');
+  const span=(+m.fy_max)-(+m.fy_min)+1;
   el.innerHTML=`
+    <div class="intro">
+      <p>This site assembles <strong>${span} years and counting</strong> of data from the Mayor's Management Report — New York City government's regular accounting of how it is performing.</p>
+      <p>The MMR comes out twice a year, but machine-readable data only reaches back to 2016. This site links it to figures published in PDFs going back another two decades, so you can follow the longer-term trends.</p>
+    </div>
     <div class="kpis">
       <div class="kpi"><div class="n">${(m.n_active||0).toLocaleString()}</div><div class="l">active indicators (latest MMR)</div></div>
       <div class="kpi"><div class="n">${m.n_indicators.toLocaleString()}</div><div class="l">indicators ever tracked</div></div>
@@ -1334,23 +1351,24 @@ function renderAbout(){
   const cby=META.cpi_base_year||2026;
   const series=(Math.floor(META.n_indicators/500)*500).toLocaleString();
   const active=(META.n_active||0).toLocaleString();
+  const span=(+META.fy_max)-(+META.fy_min)+1;
   $('#tab-about').innerHTML=`<h2>About</h2>
-  <div class="panel">
-    <p>Since 1977, New York City has published a Mayor's Management Report, as required by its charter, which includes data for tracking the performance of the city's agencies. The MMR was published for twenty years in hard copy before digital PDFs were introduced, and finally, beginning in 2016, was uploaded as machine-readable data on NYC Open Data.</p>
-    <p>This tracker is an attempt to assemble the data in a single, searchable system.</p>
+  <div class="panel about-wrap">
+    <p class="lede">Since 1977, New York City has published a Mayor's Management Report, as required by its charter, tracking the performance of the city's agencies. This site assembles ${span} years of that data into a single, searchable place.</p>
+    <p>The MMR was published in hard copy for two decades, then as digital PDFs, and finally — beginning in 2016 — as machine-readable data on NYC Open Data. Because the machine-readable record only reaches back to 2016, this site links it to the figures published in the earlier PDFs, so the trends can be followed across the full period.</p>
 
     <h3>Data sources</h3>
-    <p>This tracker combines data parsed from PDFs of the MMRs from FY1997–2026 and machine-readable data from 2016 onward. Agencies occasionally shift or relabel the data they collect, and add or drop indicators, so this tracker attempts to link the various data sources into coherent longitudinal series. This has yielded over ${series} series of data across ${META.n_agencies} agencies, including ${active} active indicators published in the most recent MMR.</p>
+    <p>This site combines data parsed from PDFs of the MMRs (FY1997–present) with machine-readable data from 2016 onward. Agencies occasionally shift or relabel what they collect, and add or drop indicators, so the data sources are linked into coherent longitudinal series — over ${series} series across ${META.n_agencies} agencies, including ${active} active indicators in the most recent MMR.</p>
 
-    <p>Linking the data required several steps:</p>
+    <h3>How the data is linked</h3>
     <ul class="tight">
-      <li><strong>Joined the PDF and machine-readable records.</strong> For each indicator, PDF MMRs typically include up to four trailing years of data, which makes it easier to accurately match indicators from PDF to PDF even when the labeling convention changes. Some measures are labeled differently even in the annual PDF and the machine-readable data for that same year; this tracker matches a PDF measure to its machine-readable counterpart only when the values agree across the years they overlap.</li>
-      <li><strong>Merged duplicate listings.</strong> The city sometimes publishes the same indicator multiple times, for example when it is the responsibility of multiple agencies or is salient in a mayoral initiative like Vision Zero, the Child Care and Housing Blueprints, or the city's gun-violence and recovery plans. This tracker attempts to eliminate duplicate series, instead attributing a single data set to all agencies or initiatives where it is named. If two operating agencies report genuinely different figures, they are retained separately.</li>
-      <li><strong>Normalized units.</strong> In a few cases the units for an indicator switched between years (e.g. from dollars to thousands of dollars); this tracker normalizes the series to a consistent unit.</li>
-      <li><strong>Adjusted for inflation.</strong> For indicators measured in dollars, this tracker calculates inflation-adjusted values in constant ${cby} dollars, using the federal CPI-U.</li>
+      <li><strong>Joining the PDF and machine-readable records.</strong> Each PDF MMR typically includes up to four trailing years of data, which makes it possible to match an indicator from PDF to PDF even when the labeling changes. A measure is matched to its machine-readable counterpart only when the values agree across the years they overlap.</li>
+      <li><strong>Merging duplicate listings.</strong> The city sometimes publishes the same indicator more than once — when it is shared by multiple agencies, or featured in an initiative like Vision Zero or the Housing Blueprint. Those are consolidated into a single series attributed to every agency or initiative that names it. Where two agencies report genuinely different figures, they are kept separate.</li>
+      <li><strong>Normalizing units.</strong> A few indicators switched units between years (e.g. from dollars to thousands of dollars); these are rescaled to one consistent unit, with the adjustment noted.</li>
+      <li><strong>Adjusting for inflation.</strong> Dollar-denominated indicators are also shown in constant ${cby} dollars, using the federal CPI-U.</li>
     </ul>
 
-    <p>The complexity of these processes creates opportunities to introduce errors, so all data included in the tracker should be interpreted cautiously. It is designed to be transparent about the source of the assembled data, including links and page numbers for the PDFs from which it is sourced. Indicators with discontinuities or that exhibit unusual patterns are flagged for manual review (⚠).</p>
+    <div class="caveat">Assembling data this way can introduce errors, so all figures should be read with care. The site is built to be transparent about provenance — it links to the source PDFs and page numbers for every value, and flags indicators with discontinuities or unusual patterns for review (⚠).</div>
   </div>`;
 }
 
@@ -1364,7 +1382,7 @@ async function boot(){
     INDS.forEach(i=>BYKEY[i.key]=i);
     const pal=['#b9381f','#2e6f8e','#5a8a3c','#9a6a2e','#6d558f','#3c7d7a'];
     META.domains.forEach((d,idx)=>DOMAIN_COLOR[d]=pal[idx%pal.length]);
-    $('#hdrTitle').textContent=`New York City Performance Tracker • ${META.fy_min}–${META.fy_max}`;
+    document.title=$('#hdrTitle').textContent+' — Mayor’s Management Report';
     state=readHash();
     render();
   }catch(e){
