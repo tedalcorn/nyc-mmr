@@ -112,6 +112,9 @@ th .arr{font-size:9px;color:var(--accent)}
 .trendnum{font-variant-numeric:tabular-nums;font-weight:600}
 .up{color:var(--bad)} .down{color:var(--good)} /* default; overridden by desired direction */
 .backlink{display:inline-block;margin-bottom:12px;font-size:13.5px;cursor:pointer}
+.dlbar{display:flex;justify-content:flex-end;gap:7px;margin-bottom:6px}
+.dlbtn{font-size:11.5px;padding:3px 10px;background:#f4f5f6;border:1px solid #d9d9d9;border-radius:5px;cursor:pointer;color:#555;line-height:1.4}
+.dlbtn:hover{background:#e9ebed;color:#222}
 .detail-head{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:flex-start;margin-bottom:14px}
 .tag{display:inline-block;background:var(--accent-soft);color:var(--accent);padding:2px 9px;border-radius:6px;font-size:12px;font-weight:600;margin-right:6px}
 .def{color:var(--ink);font-size:13.5px;background:#faf9f6;border-left:3px solid var(--line);padding:10px 12px;border-radius:0 6px 6px 0;margin-top:10px}
@@ -683,7 +686,10 @@ function renderIndicators(){
   const upd=()=>{
     state.q=q.value; state.fdom=fd.value; state.fag=fa.value; state.fsal=fs.value;
     const term=q.value.trim().toLowerCase();
-    const byText=x=>!term||(x.name||'').toLowerCase().includes(term)||(x.agency_name||'').toLowerCase().includes(term);
+    const toks=term.split(/\s+/).filter(Boolean);   // every word must appear (in any order), so "single adults shelter" matches "...single adults in shelters..."
+    const byText=x=>{ if(!toks.length) return true;
+      const hay=((x.name||'')+' '+(x.agency_name||'')+' '+((x.agencies||[]).join(' '))+' '+(x.desc||'')).toLowerCase();
+      return toks.every(t=>hay.includes(t)); };
     // apply the non-text filters first (these bound any group we pull in)
     let base=INDS.slice();
     if(fd.value)base=base.filter(i=>i.domain===fd.value);
@@ -984,6 +990,7 @@ function renderDetail(key){
     </div>
     <div class="row2">
       <div class="panel">
+        <div class="dlbar"><button class="dlbtn" onclick="exportIndicatorCSV('${esc(key)}')" title="Download the data as a CSV (with the source MMR URL for each year)">↓ CSV</button><button class="dlbtn" onclick="exportIndicatorJPG('${esc(key)}')" title="Download a shareable chart image (JPG)">↓ JPG</button></div>
         <div class="chartwrap"><canvas id="detChart"></canvas></div>
         ${i.annotation?`<div class="note" style="color:#2f6f57;border-top-color:#bfe0d0">✓ Reviewed: ${esc(i.annotation.note||'')}${i.annotation.edition?` <a href="${(META.pdf_urls||{})[String(i.annotation.edition).replace(/^FY/,'')]||'#'}" target="_blank" rel="noopener">FY${String(i.annotation.edition).replace(/^FY/,'')} MMR p.${i.annotation.page}</a>`:''}</div>`:i.inadequate?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Inadequately labeled indicator — its name and definition still need to be reconstructed from the source MMR.</div>`:i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Discontinuous data — no values reported for ${yrRange(i.flags)}.</div>`:''}
       </div>
@@ -1048,6 +1055,151 @@ function renderDetail(key){
         y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},precision:allInt?0:undefined,callback:v=>fmt(v)},title:{display:!!yLabel,text:yLabel,font:{size:11}}}}}});
   attachDirButtons();
   if(hasGeo){ const sel=$('#geoType'); const load=()=>loadGeoChart(key,sel.value); sel.onchange=load; load(); }
+}
+
+/* ---------- per-indicator downloads (CSV + shareable JPG) ---------- */
+// download filename: "NYC MMR - <Indicator Name> - <firstFY>-<lastFY>.<ext>" (filesystem-safe)
+function _dlName(i,pu,ext){
+  const ys=yearsOf(i.series), span=ys.length?ys[0]+'-'+ys[ys.length-1]:'';
+  const nm=(pu.name||i.name).replace(/[\/\\:*?"<>|]/g,'-').replace(/\s+/g,' ').trim();
+  return `NYC MMR - ${nm}${span?' - '+span:''}.${ext}`;
+}
+// the New York City department/agency that furnishes the data
+function _agencyFull(name){ if(!name) return ''; return /new york|^nyc\b|city university/i.test(name)?name:'New York City '+name; }
+// the source MMR (or Open Data) URL that actually furnished a given year's value
+function _srcUrlForYear(i,y){
+  const u=META.pdf_urls||{};
+  const p=(i.pdf_prov||{})[y];          // pre-2016 value supplied by a specific (often later) edition
+  if(p&&u[p[0]]) return u[p[0]];
+  if(u[y]) return u[y];                 // else that fiscal year's own MMR PDF (we have FY2002-2025)
+  if(y>=+META.structured_min) return META.opendata_url||'';   // 2016+ w/o a PDF: the Open Data feed
+  return 'https://www.nyc.gov/site/operations/reports/mmr.page'; // pre-2002 PDFs: MMR archive page
+}
+function _unitParen(i,pu){
+  const s=(pu.sfx||'').trim();
+  if(s==='%') return ' (%)'; if(s==='$') return ' ($)'; if(s) return ' ('+s+')';
+  return i.unit?' ('+i.unit+')':'';
+}
+
+function exportIndicatorCSV(key){
+  const i=BYKEY[key]; if(!i) return;
+  const pu=parseUnit(i.name), ys=yearsOf(i.series);
+  const base=(pu.name||i.name)+_unitParen(i,pu);
+  const head=['Fiscal Year', i.real?base+' — nominal':base];
+  if(i.real) head.push(base+' — inflation-adjusted ('+META.cpi_base_year+' $)');
+  if(i.targets) head.push('MMR target');
+  head.push('Source (MMR / Open Data URL)');
+  const rows=[head];
+  for(const y of ys){
+    const r=['FY'+y, i.series[y]??''];
+    if(i.real) r.push(i.real[y]??'');
+    if(i.targets) r.push(i.targets[y]??'');
+    r.push(_srcUrlForYear(i,y));
+    rows.push(r);
+  }
+  const csv=rows.map(r=>r.map(c=>{c=(c==null?'':String(c));return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=_dlName(i,pu,'csv'); a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+// word-wrap text to a max width / max lines (last line gets an ellipsis if clipped)
+function _wrap(c,text,maxW,maxLines){
+  const words=(text||'').split(/\s+/).filter(Boolean), lines=[]; let line='';
+  for(const w of words){
+    const t=line?line+' '+w:w;
+    if(c.measureText(t).width>maxW && line){ lines.push(line); line=w; if(lines.length===maxLines-1) break; }
+    else line=t;
+  }
+  if(line && lines.length<maxLines) lines.push(line);
+  // if there was overflow, mark ellipsis on the final line
+  const consumed=lines.join(' ').split(/\s+/).filter(Boolean).length;
+  if(consumed<words.length){ let last=lines[lines.length-1]||''; while(c.measureText(last+'…').width>maxW && last.includes(' ')) last=last.slice(0,last.lastIndexOf(' ')); lines[lines.length-1]=last+'…'; }
+  return lines;
+}
+
+function exportIndicatorJPG(key){
+  const i=BYKEY[key]; if(!i) return;
+  const pu=parseUnit(i.name);
+  const ys=yearsOf(i.series), fy0=ys[0], fyN=ys[ys.length-1];
+  const fullYs=Array.from({length:fyN-fy0+1},(_,k)=>fy0+k);
+  const allInt=ys.every(y=>Number.isInteger(i.series[y]));
+  const S=2;                                  // retina multiplier — everything below is drawn into an innerW*S buffer
+  // datasets (mirror the on-screen detail chart; legend only when >1 series). Strokes/points sized for the hi-res buffer.
+  const ds=[{label:i.is_dollar?'Nominal $':(pu.name||i.name),data:fullYs.map(y=>i.series[y]??null),
+    borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,
+    pointRadius:fullYs.map(y=>i.series[y]==null?0:2.4*S),pointBackgroundColor:'#b9381f',pointBorderColor:'#b9381f'}];
+  if(i.real) ds.push({label:'Inflation-adjusted ('+META.cpi_base_year+' $)',data:fullYs.map(y=>i.real[y]??null),borderColor:'#2e6f8e',borderWidth:2.4*S,borderDash:[6,4],tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>i.real[y]==null?0:2*S),pointBackgroundColor:'#2e6f8e',pointBorderColor:'#2e6f8e'});
+  if(i.targets) ds.push({label:'MMR target',data:fullYs.map(y=>i.targets[y]??null),borderColor:'#9a958a',borderWidth:1.6*S,borderDash:[5,5],tension:.1,backgroundColor:'transparent',spanGaps:true,pointRadius:0});
+  const multi=ds.length>1;
+  let yTitle=(pu.sfx&&pu.sfx.trim())||i.unit||'';
+  if(yTitle==='$') yTitle='US dollars'; else if(yTitle==='%') yTitle='Percent';
+
+  const cardW=1080, pad=56, innerW=cardW-2*pad, chartH=600;
+  // pre-measure title + definition + source on a scratch ctx to size the card
+  const meas=document.createElement('canvas').getContext('2d');
+  meas.font=`bold ${38}px Georgia,'Times New Roman',serif`;
+  const titleLines=_wrap(meas,pu.name||i.name,innerW,3);
+  meas.font=`18.5px Arial,Helvetica,sans-serif`;
+  const defLines=i.desc?_wrap(meas,i.desc,innerW,5):[];
+  const agency=_agencyFull(i.agency_name||(typeof agencyName==='function'?agencyName(i.agency):'')||i.agency);
+  const srcTxt='Source: '+((i.source&&i.source.toLowerCase()!==(agency||'').toLowerCase())?i.source+', ':'')+agency;
+  meas.font=`17px Arial,Helvetica,sans-serif`;
+  const srcLines=_wrap(meas,srcTxt,innerW,3);
+
+  // vertical layout (logical px)
+  let y=pad;
+  const titleLH=46, defLH=25, srcLH=24;
+  const yTitleTop=y; y+=titleLines.length*titleLH;
+  if(defLines.length){ y+=10; y+=defLines.length*defLH; }
+  const yChartTop=y+40; y=yChartTop+chartH;
+  const ySrcTop=y+26; y=ySrcTop+srcLines.length*srcLH;
+  const cardH=y+pad;
+
+  // render the chart into an offscreen high-res canvas
+  const holder=document.createElement('div');
+  holder.style.cssText='position:absolute;left:-99999px;top:0';
+  const cc=document.createElement('canvas');
+  cc.width=innerW*S; cc.height=chartH*S; cc.style.width=innerW+'px'; cc.style.height=chartH+'px';
+  holder.appendChild(cc); document.body.appendChild(holder);
+  const chart=new Chart(cc.getContext('2d'),{type:'line',data:{labels:fullYs.map(String),datasets:ds},
+    options:{responsive:false,maintainAspectRatio:false,animation:false,devicePixelRatio:1,
+      layout:{padding:6*S},
+      plugins:{legend:{display:multi,labels:{usePointStyle:true,boxWidth:13*S,font:{size:12.5*S}}}},
+      scales:{x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:12,font:{size:12.5*S}}},
+        y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.07)'},ticks:{font:{size:12.5*S},precision:allInt?0:undefined,callback:v=>fmt(v)},
+          title:{display:!!yTitle,text:yTitle,font:{size:13*S,weight:'600'}}}}}});
+
+  requestAnimationFrame(()=>{
+    const out=document.createElement('canvas');
+    out.width=cardW*S; out.height=cardH*S;
+    const c=out.getContext('2d');
+    c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high';
+    c.fillStyle='#fff'; c.fillRect(0,0,out.width,out.height);
+    c.textBaseline='alphabetic';
+    // title
+    c.fillStyle='#1a1a1a'; c.font=`bold ${38*S}px Georgia,'Times New Roman',serif`;
+    let ty=yTitleTop+34;
+    titleLines.forEach(l=>{ c.fillText(l,pad*S,ty*S); ty+=titleLH; });
+    // definition
+    if(defLines.length){ c.fillStyle='#5a5a5a'; c.font=`${18.5*S}px Arial,Helvetica,sans-serif`;
+      let dy=ty+8+18; defLines.forEach(l=>{ c.fillText(l,pad*S,dy*S); dy+=defLH; }); }
+    // chart
+    c.drawImage(chart.canvas,pad*S,yChartTop*S,innerW*S,chartH*S);
+    // source
+    c.fillStyle='#555'; c.font=`${17*S}px Arial,Helvetica,sans-serif`;
+    let sy=ySrcTop+15; srcLines.forEach(l=>{ c.fillText(l,pad*S,sy*S); sy+=srcLH; });
+    // footer credit (right)
+    c.fillStyle='#b0b0b0'; c.font=`${13*S}px Arial,Helvetica,sans-serif`; c.textAlign='right';
+    c.fillText('NYC Mayor’s Management Report · tedalcorn.github.io/nyc-mmr',(cardW-pad)*S,(cardH-pad+20)*S);
+    c.textAlign='left';
+
+    const a=document.createElement('a');
+    a.download=_dlName(i,pu,'jpg');
+    a.href=out.toDataURL('image/jpeg',0.95); a.click();
+    chart.destroy(); holder.remove();
+  });
 }
 
 async function loadGeoChart(key,gt){
