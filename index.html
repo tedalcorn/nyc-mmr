@@ -17,7 +17,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 header{padding:22px 24px 8px;max-width:1180px;margin:0 auto}
-header h1{font-size:26px;font-weight:700;letter-spacing:-.5px}
+header h1{font-size:28px;font-weight:700;letter-spacing:-.5px;display:flex;align-items:center;gap:14px}
+.hdrlogo{height:1em;width:auto;flex:0 0 auto}
 header h1 .brand-nyc{font-weight:400;color:var(--muted)}
 header h1 .brand-pulse{font-weight:800;color:var(--ink)}
 header p{color:var(--muted);font-size:14px;margin-top:3px;max-width:760px}
@@ -140,7 +141,7 @@ ul.tight{margin:8px 0 0 18px}ul.tight li{margin:3px 0;font-size:13.5px}
 </head>
 <body>
 <header>
-  <h1 id="hdrTitle"><span class="brand-nyc">NYC</span><span class="brand-pulse">Pulse</span></h1>
+  <h1 id="hdrTitle"><span class="wm"><span class="brand-nyc">NYC</span><span class="brand-pulse">Pulse</span></span><svg class="hdrlogo" viewBox="50 72 674 410" fill="none" aria-hidden="true"><path d="M 55 440 L 62.0 168 L 78.0 168 L 80.0 78 L 82.0 168 L 98.0 168 L 105 300 L 105 292 L 125 292 L 125 262 L 151 262 L 151 300 L 171 300 L 171 300 L 171 236 L 183.5 236 L 183.5 196 L 196.0 196 L 196.0 166 L 203.0 166 L 203.0 140 L 207.0 140 L 210.0 112 L 213.0 140 L 217.0 140 L 217.0 166 L 224.0 166 L 224.0 196 L 236.5 196 L 236.5 236 L 249 236 L 249 300 L 249 278 L 271 278 L 271 300 L 297 300 L 297 300 L 297 170 L 309.8 170 L 309.8 148 L 321.4 120 L 337.6 120 L 346.9 150 L 355 440" fill="none" stroke="#161616" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/><path d="M 355 440 L 377 440 L 393 440 L 404 422 L 415 440 L 433 440 L 440 460 L 451 78 L 462 476 L 473 440 L 491 412 L 509 440 L 527 440 L 543 440 L 554 422 L 565 440 L 583 440 L 590 460 L 601 78 L 612 476 L 623 440 L 641 412 L 659 440 L 699 440" fill="none" stroke="#c0271c" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/></svg></h1>
   <p>Compiling data from the <strong>Mayor's Management Reports</strong> (1998–present)</p>
 </header>
 <nav class="tabs">
