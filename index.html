@@ -411,9 +411,12 @@ function attachDirButtons(){
   });
 }
 function pctChange(ind){
-  const ys=yearsOf(ind.series).filter(y=>!isPartial(y));
+  // for dollar measures, trend on the inflation-adjusted series so the badge
+  // reflects real change, not nominal (which double-counts inflation)
+  const src=(ind.is_dollar&&ind.real)?ind.real:ind.series;
+  const ys=yearsOf(src).filter(y=>!isPartial(y));
   if(ys.length<2) return null;
-  const a=ind.series[ys[0]], b=ind.series[ys[ys.length-1]];
+  const a=src[ys[0]], b=src[ys[ys.length-1]];
   if(a==null||b==null||a===0) return null;
   return ((b-a)/Math.abs(a))*100;
 }
