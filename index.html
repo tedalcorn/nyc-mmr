@@ -1181,12 +1181,17 @@ function exportIndicatorJPG(key,opts){
   const allInt=(mode!=='real')&&sc===1&&ys.every(y=>Number.isInteger(i.series[y]));
   const S=2;
   const mk=(o)=>fullYs.map(y=>(o&&o[y]!=null)?o[y]*sc:null);
+  // partial / provisional latest year: hollow diamond + dashed final segment, as on the page
+  const lastP=isPartial(fyN);
+  const pStyle=(o,col,r)=>({pointRadius:fullYs.map(y=>(!o||o[y]==null)?0:(isPartial(y)?r*1.9:r)),pointStyle:fullYs.map(y=>isPartial(y)?'rectRot':'circle'),
+    pointBackgroundColor:fullYs.map(y=>isPartial(y)?'#fff':col),pointBorderColor:col,pointBorderWidth:fullYs.map(y=>isPartial(y)?1.8*S:1)});
+  const segDash=(base)=>({borderDash:c=>(lastP&&c.p1DataIndex===fullYs.length-1)?[5*S,4*S]:base});
   const ds=[];
   if(mode==='real'){
-    ds.push({data:mk(i.real),borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>(i.real&&i.real[y]!=null)?2.4*S:0),pointBackgroundColor:'#b9381f',pointBorderColor:'#b9381f'});
+    ds.push({data:mk(i.real),borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,...pStyle(i.real,'#b9381f',2.4*S),segment:segDash(undefined)});
   } else {
-    ds.push({label:i.is_dollar?'Nominal $':(pu.name||i.name),data:mk(i.series),borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>i.series[y]==null?0:2.4*S),pointBackgroundColor:'#b9381f',pointBorderColor:'#b9381f'});
-    if(i.real && mode!=='nominal') ds.push({label:'Inflation-adjusted ('+META.cpi_base_year+' $)',data:mk(i.real),borderColor:'#2e6f8e',borderWidth:2.4*S,borderDash:[6,4],tension:.2,backgroundColor:'transparent',spanGaps:false,pointRadius:fullYs.map(y=>(i.real&&i.real[y]!=null)?2*S:0),pointBackgroundColor:'#2e6f8e',pointBorderColor:'#2e6f8e'});
+    ds.push({label:i.is_dollar?'Nominal $':(pu.name||i.name),data:mk(i.series),borderColor:'#b9381f',borderWidth:2.4*S,tension:.2,backgroundColor:'transparent',spanGaps:false,...pStyle(i.series,'#b9381f',2.4*S),segment:segDash(undefined)});
+    if(i.real && mode!=='nominal') ds.push({label:'Inflation-adjusted ('+META.cpi_base_year+' $)',data:mk(i.real),borderColor:'#2e6f8e',borderWidth:2.4*S,borderDash:[6,4],tension:.2,backgroundColor:'transparent',spanGaps:false,...pStyle(i.real,'#2e6f8e',2*S)});
   }
   if(i.targets && !opts.noTarget) ds.push({label:'MMR target',data:mk(i.targets),borderColor:'#9a958a',borderWidth:1.6*S,borderDash:[5,5],tension:.1,backgroundColor:'transparent',spanGaps:true,pointRadius:0});
   const multi=ds.length>1;
@@ -1207,6 +1212,9 @@ function exportIndicatorJPG(key,opts){
   const srcTxt='Source: '+((i.source&&i.source.toLowerCase()!==(agency||'').toLowerCase())?i.source+', ':'')+agency;
   meas.font=`17px Arial,Helvetica,sans-serif`;
   const srcLines=_wrap(meas,srcTxt,innerW,3);
+  const provTxt=!lastP?'':(i.prov?('Hollow marker: FY'+fyN+' is provisional, transcribed from the printed Mayor’s Management Report pending the City’s data release.')
+                                   :('Hollow marker: FY'+fyN+' is preliminary (partial year).'));
+  const provLines=provTxt?_wrap(meas,provTxt,innerW,2):[];
 
   // vertical layout (logical px)
   let y=pad;
@@ -1214,7 +1222,7 @@ function exportIndicatorJPG(key,opts){
   const yTitleTop=y; y+=titleLines.length*titleLH;
   if(defLines.length){ y+=10; y+=defLines.length*defLH; }
   const yChartTop=y+40; y=yChartTop+chartH;
-  const ySrcTop=y+26; y=ySrcTop+srcLines.length*srcLH;
+  const ySrcTop=y+26; y=ySrcTop+srcLines.length*srcLH+provLines.length*srcLH;
   const cardH=y+pad;
 
   // render the chart into an offscreen high-res canvas
@@ -1271,11 +1279,13 @@ function exportIndicatorJPG(key,opts){
     // source
     c.fillStyle='#555'; c.font=`${17*S}px Arial,Helvetica,sans-serif`;
     let sy=ySrcTop+15; srcLines.forEach(l=>{ c.fillText(l,pad*S,sy*S); sy+=srcLH; });
+    if(provLines.length){ c.fillStyle='#9a6a00'; c.font=`italic ${17*S}px Arial,Helvetica,sans-serif`; provLines.forEach(l=>{ c.fillText(l,pad*S,sy*S); sy+=srcLH; }); }
     // footer credit (right)
     c.fillStyle='#b0b0b0'; c.font=`${13*S}px Arial,Helvetica,sans-serif`; c.textAlign='right';
     c.fillText('NYC Mayor’s Management Report · tedalcorn.github.io/nyc-mmr',(cardW-pad)*S,(cardH-pad+20)*S);
     c.textAlign='left';
 
+    if(opts.preview){ out.style.width=cardW+'px'; document.body.innerHTML=''; document.body.appendChild(out); chart.destroy(); holder.remove(); return; }
     const a=document.createElement('a');
     a.download=_dlName(i,pu,'jpg');
     a.href=out.toDataURL('image/jpeg',0.95); a.click();
@@ -1439,6 +1449,7 @@ async function boot(){
     document.title=$('#hdrTitle').textContent+' — Mayor’s Management Report';
     state=readHash();
     render();
+    const _pv=new URLSearchParams(location.search).get('jpgpreview'); if(_pv&&BYKEY[_pv]) exportIndicatorJPG(_pv,{preview:true,labelEnds:true});
   }catch(e){
     $('#tab-overview').innerHTML='<div class="loading">Could not load data. If viewing locally, serve the folder over http (e.g. <code>python3 -m http.server</code>) rather than opening the file directly.</div>';
     console.error(e);
