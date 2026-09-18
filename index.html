@@ -152,6 +152,7 @@ ul.tight{margin:8px 0 0 18px}ul.tight li{margin:3px 0;font-size:13.5px}
   <button data-tab="about">About</button>
 </nav>
 <main>
+  <div id="provBar" hidden style="margin:0 0 14px;padding:8px 12px;border:1px solid #f0d9a8;background:#fdf6e6;color:#7a5600;border-radius:8px;font-size:13px"></div>
   <section id="tab-overview" class="tab active"><div class="loading">Loading data…</div></section>
   <section id="tab-agencies" class="tab"></section>
   <section id="tab-indicators" class="tab"></section>
@@ -234,6 +235,11 @@ const sortName=i=>(i.name||'').replace(/^[^a-z0-9]+/i,'').toLowerCase();
 
 function yearsOf(series){return Object.keys(series).map(Number).sort((a,b)=>a-b);}
 function isPartial(fy){return META.partial_years.includes(String(fy));}
+// PROVISIONAL OVERLAY (data/provisional_fy2026.json): values transcribed from the printed MMR,
+// merged at boot for indicators that lack that year; delete the file once Open Data has it.
+let PROV=null;
+const isProv=(i,fy)=>!!(i&&i.prov&&i.prov.fy===+fy);
+function partialTag(fy){return (PROV&&String(PROV.fiscal_year)===String(fy))?' (provisional, from the printed MMR)':' (preliminary)';}
 
 /* ---------- tab routing ---------- */
 function showTab(t){
@@ -308,7 +314,7 @@ function lineChart(canvasId, series, opt={}){
       responsive:true,maintainAspectRatio:false,animation:false,
       plugins:{legend:{display:!!opt.legend},tooltip:{callbacks:{
         title:i=>'FY'+i[0].label,
-        label:i=>fmt(i.raw)+(isPartial(i.label)?'  (preliminary)':'')
+        label:i=>fmt(i.raw)+(isPartial(i.label)?' '+partialTag(i.label):'')
       }}},
       scales:{
         x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,autoSkip:true,font:{size:11}}},
@@ -336,7 +342,7 @@ function barChart(canvasId, labels, data, colors){
 // Single year of data -> one dot and just the latest value (start left blank).
 function trendInner(series,sfx){
   const ys=yearsOf(series); if(!ys.length) return '';
-  const gmin=+META.fy_min, gmax=+META.fy_max, span=(gmax-gmin)||1;
+  const gmin=+META.fy_min, gmax=Math.max(+META.fy_max,PROV?+PROV.fiscal_year:0), span=(gmax-gmin)||1;
   const W=200,H=26,X0=54,X1=150,PT=5,PB=5;
   const xOf=y=>X0+((y-gmin)/span)*(X1-X0);
   const v=ys.map(y=>series[y]); const mn=Math.min(...v),mx=Math.max(...v),rng=(mx-mn)||1;
@@ -357,7 +363,9 @@ function trendInner(series,sfx){
     flush();
     svg+=`<circle cx="${xOf(y0).toFixed(1)}" cy="${yOf(series[y0]).toFixed(1)}" r="2.2" fill="#b9381f"/>`;
   }
-  svg+=`<circle cx="${x1.toFixed(1)}" cy="${yy1.toFixed(1)}" r="2.2" fill="#b9381f"/>`;
+  const provEnd=PROV&&y1===+PROV.fiscal_year;   // provisional latest year: hollow end dot
+  svg+=provEnd?`<circle cx="${x1.toFixed(1)}" cy="${yy1.toFixed(1)}" r="2.4" fill="#fff" stroke="#b9381f" stroke-width="1.3"><title>FY${y1} provisional: from the printed MMR</title></circle>`
+             :`<circle cx="${x1.toFixed(1)}" cy="${yy1.toFixed(1)}" r="2.2" fill="#b9381f"/>`;
   const _sc=spScale([series[y0],series[y1]]);
   const startLab=single?'':`<span class="tlab s" style="left:${(xOf(y0)-3).toFixed(1)}px;top:${yOf(series[y0]).toFixed(1)}px" title="FY${y0}">${fmtUCs(series[y0],csf,_sc)}</span>`;
   const endLab=`<span class="tlab e" style="left:${(x1+5).toFixed(1)}px;top:${yy1.toFixed(1)}px" title="FY${y1}">${fmtUCs(series[y1],csf,_sc)}</span>`;
@@ -493,7 +501,7 @@ function scoreMove(i,relaxed){
   }
   // use the inflation-adjusted series for dollar measures
   const S=(i.is_dollar&&i.real)?i.real:i.series, real=(i.is_dollar&&i.real);
-  const ys=yearsOf(S); if(ys.length<6) return null;
+  const ys=yearsOf(S).filter(y=>!isPartial(y)); if(ys.length<6) return null;
   if(!relaxed && ys[0]>2014) return null;            // skip brand-new measures
   const y1=ys[ys.length-1]; if(!relaxed && maxY-y1>1) return null;  // current-ish
   const fset=new Set(i.flags||[]);
@@ -988,7 +996,7 @@ function renderDetail(key){
   // values come from a later edition's 5-year look-back, so we cite that edition (with
   // its page) — never an MMR that merely happened to share the fiscal year.
   const pu_urls=META.pdf_urls||{};
-  const odYs=ys.filter(y=>y>=sm), provMap=i.pdf_prov||{};
+  const odYs=ys.filter(y=>y>=sm&&!isProv(i,y)), provMap=i.pdf_prov||{};
   const byEd={};
   for(const y of ys.filter(y=>y<sm)){
     const p=provMap[y]; if(!p) continue;
@@ -1014,6 +1022,7 @@ function renderDetail(key){
       <div class="panel">
         <div class="dlbar"><button class="dlbtn" onclick="exportIndicatorCSV('${esc(key)}')" title="Download the data as a CSV (with the source MMR URL for each year)">↓ CSV</button><button class="dlbtn" onclick="exportIndicatorJPG('${esc(key)}')" title="Download a shareable chart image (JPG)">↓ JPG</button></div>
         <div class="chartwrap"><canvas id="detChart"></canvas></div>
+        ${i.prov?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">◇ FY${i.prov.fy} is <b>provisional</b>: transcribed from the printed <a href="${PROV.pdf_url}#page=${i.prov.page}" target="_blank" rel="noopener">FY${i.prov.fy} Mayor's Management Report</a>${i.prov.page?` (pdf p.${i.prov.page})`:''}, pending the City's machine-readable release. It will be replaced by the NYC Open Data value.</div>`:''}
         ${i.annotation?`<div class="note" style="color:#2f6f57;border-top-color:#bfe0d0">✓ Reviewed: ${esc(i.annotation.note||'')}${i.annotation.edition?` <a href="${(META.pdf_urls||{})[String(i.annotation.edition).replace(/^FY/,'')]||'#'}" target="_blank" rel="noopener">FY${String(i.annotation.edition).replace(/^FY/,'')} MMR p.${i.annotation.page}</a>`:''}</div>`:i.inadequate?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Inadequately labeled indicator — its name and definition still need to be reconstructed from the source MMR.</div>`:i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Discontinuous data — no values reported for ${yrRange(i.flags)}.</div>`:''}
       </div>
       <div class="panel">
@@ -1072,7 +1081,7 @@ function renderDetail(key){
     options:{responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',intersect:false},   // hover any year -> show nominal + inflation-adjusted + target together
       plugins:{legend:{display:!!(i.targets||i.real),labels:{usePointStyle:true,boxWidth:18,font:{size:11}}},
-        tooltip:{callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)+(isPartial(t.label)?' (prelim)':'')}}},
+        tooltip:{callbacks:{title:t=>'FY'+t[0].label,label:t=>t.dataset.label+': '+fmtU(t.raw,pu.sfx)+(isPartial(t.label)?partialTag(t.label):'')}}},
       scales:{x:{grid:{display:false,drawBorder:false},ticks:{maxRotation:0,font:{size:11}}},
         y:{beginAtZero:true,grid:{color:'rgba(0,0,0,.06)'},ticks:{font:{size:11},precision:allInt?0:undefined,callback:v=>fmt(v)},title:{display:!!yLabel,text:yLabel,font:{size:11}}}}}});
   attachDirButtons();
@@ -1090,6 +1099,7 @@ function _dlName(i,pu,ext){
 function _agencyFull(name){ if(!name) return ''; return /new york|^nyc\b|city university/i.test(name)?name:'New York City '+name; }
 // the source MMR (or Open Data) URL that actually furnished a given year's value
 function _srcUrlForYear(i,y){
+  if(isProv(i,y)) return PROV.pdf_url+' (provisional: transcribed from the printed MMR, p.'+i.prov.page+')';
   const u=META.pdf_urls||{};
   const p=(i.pdf_prov||{})[y];          // pre-2016 value supplied by a specific (often later) edition
   if(p&&u[p[0]]) return u[p[0]];
@@ -1415,6 +1425,15 @@ async function boot(){
       fetch('data/indicators.json').then(r=>r.json())
     ]);
     INDS.forEach(i=>BYKEY[i.key]=i);
+    try{ const pr=await fetch('data/provisional_fy2026.json');
+      if(pr.ok){ const P=await pr.json(), fy=String(P.fiscal_year);
+        if(META.partial_years.includes(fy)){ let n=0;
+          for(const k in P.values){ const i=BYKEY[k], o=P.values[k];
+            if(!i||i.series[fy]!=null) continue;          // real data always wins
+            i.series[fy]=o.v; if(i.real&&String(META.cpi_base_year)===fy) i.real[fy]=o.v;
+            i.prov={fy:+fy,page:o.p}; n++; }
+          if(n){ PROV=P; const b=$('#provBar'); if(b){ b.hidden=false;
+            b.innerHTML='◇ <b>FY'+fy+' values are provisional.</b> '+n.toLocaleString()+' indicators show a value transcribed from the printed <a href="'+P.pdf_url+'" target="_blank" rel="noopener">FY'+fy+' Mayor’s Management Report</a> (hollow marker), pending the City’s machine-readable release. Series whose history the new report restated are held back until then.'; } } } } }catch(e){ console.warn('no provisional overlay',e); }
     const pal=['#b9381f','#2e6f8e','#5a8a3c','#9a6a2e','#6d558f','#3c7d7a'];
     META.domains.forEach((d,idx)=>DOMAIN_COLOR[d]=pal[idx%pal.length]);
     document.title=$('#hdrTitle').textContent+' — Mayor’s Management Report';
