@@ -1022,7 +1022,7 @@ function renderDetail(key){
       <div class="panel">
         <div class="dlbar"><button class="dlbtn" onclick="exportIndicatorCSV('${esc(key)}')" title="Download the data as a CSV (with the source MMR URL for each year)">↓ CSV</button><button class="dlbtn" onclick="exportIndicatorJPG('${esc(key)}')" title="Download a shareable chart image (JPG)">↓ JPG</button></div>
         <div class="chartwrap"><canvas id="detChart"></canvas></div>
-        ${i.prov?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">◇ FY${i.prov.fy} is <b>provisional</b>: transcribed from the printed <a href="${PROV.pdf_url}#page=${i.prov.page}" target="_blank" rel="noopener">FY${i.prov.fy} Mayor's Management Report</a>${i.prov.page?` (pdf p.${i.prov.page})`:''}, pending the City's machine-readable release. It will be replaced by the NYC Open Data value.</div>`:''}
+        ${i.prov?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">◇ FY${i.prov.fy} is <b>provisional</b>: transcribed from the printed <a href="${PROV.pdf_url}#page=${i.prov.page}" target="_blank" rel="noopener">FY${i.prov.fy} Mayor's Management Report</a>${i.prov.page?` (pdf p.${i.prov.page})`:''}, pending the City's machine-readable release. It will be replaced by the NYC Open Data value.${i.prov.restated?' The printed report also revised some earlier years of this series; those revisions are not shown yet and will arrive with the City’s data.':''}</div>`:''}
         ${i.annotation?`<div class="note" style="color:#2f6f57;border-top-color:#bfe0d0">✓ Reviewed: ${esc(i.annotation.note||'')}${i.annotation.edition?` <a href="${(META.pdf_urls||{})[String(i.annotation.edition).replace(/^FY/,'')]||'#'}" target="_blank" rel="noopener">FY${String(i.annotation.edition).replace(/^FY/,'')} MMR p.${i.annotation.page}</a>`:''}</div>`:i.inadequate?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Inadequately labeled indicator — its name and definition still need to be reconstructed from the source MMR.</div>`:i.flags&&i.flags.length?`<div class="note" style="color:#9a6a00;border-top-color:#f0d9a8">⚠ Discontinuous data — no values reported for ${yrRange(i.flags)}.</div>`:''}
       </div>
       <div class="panel">
@@ -1441,9 +1441,9 @@ async function boot(){
           for(const k in P.values){ const i=BYKEY[k], o=P.values[k];
             if(!i||i.series[fy]!=null) continue;          // real data always wins
             i.series[fy]=o.v; if(i.real&&String(META.cpi_base_year)===fy) i.real[fy]=o.v;
-            i.prov={fy:+fy,page:o.p}; n++; }
+            i.prov={fy:+fy,page:o.p,restated:!!o.r}; n++; }
           if(n){ PROV=P; const b=$('#provBar'); if(b){ b.hidden=false;
-            b.innerHTML='◇ <b>FY'+fy+' values are provisional.</b> '+n.toLocaleString()+' indicators show a value transcribed from the printed <a href="'+P.pdf_url+'" target="_blank" rel="noopener">FY'+fy+' Mayor’s Management Report</a> (hollow marker), pending the City’s machine-readable release. Series whose history the new report restated are held back until then.'; } } } } }catch(e){ console.warn('no provisional overlay',e); }
+            b.innerHTML='◇ <b>FY'+fy+' values are provisional.</b> '+n.toLocaleString()+' indicators show a value transcribed from the printed <a href="'+P.pdf_url+'" target="_blank" rel="noopener">FY'+fy+' Mayor’s Management Report</a> (hollow marker), pending the City’s machine-readable release. Where the new report also revised earlier years, only FY'+fy+' is added for now.'; } } } } }catch(e){ console.warn('no provisional overlay',e); }
     const pal=['#b9381f','#2e6f8e','#5a8a3c','#9a6a2e','#6d558f','#3c7d7a'];
     META.domains.forEach((d,idx)=>DOMAIN_COLOR[d]=pal[idx%pal.length]);
     document.title=$('#hdrTitle').textContent+' — Mayor’s Management Report';
